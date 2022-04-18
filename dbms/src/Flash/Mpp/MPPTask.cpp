@@ -354,6 +354,16 @@ void MPPTask::runImpl()
         if (dag_context)
             dag_context->cancelAllExchangeReceiver();
         writeErrToAllTunnels(err_msg);
+
+        /// for fail mpp task, we can still try to collect runtime statistics.
+        try
+        {
+            mpp_task_statistics.collectRuntimeStatistics();
+        }
+        catch (...)
+        {
+            LOG_FMT_ERROR(log, "collect runtime statistics for failed mpp task meets error: {}", getCurrentExceptionMessage(false, true));
+        }
     }
     LOG_FMT_INFO(log, "task ends, time cost is {} ms.", stopwatch.elapsedMilliseconds());
     unregisterTask();

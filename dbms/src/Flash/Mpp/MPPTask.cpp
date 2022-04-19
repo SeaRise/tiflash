@@ -41,6 +41,8 @@ namespace DB
 {
 namespace FailPoints
 {
+extern const char exception_before_mpp_prepare_for_non_root_mpp_task[];
+extern const char exception_before_mpp_prepare_for_root_mpp_task[];
 extern const char exception_before_mpp_register_non_root_mpp_task[];
 extern const char exception_before_mpp_register_root_mpp_task[];
 extern const char exception_before_mpp_register_tunnel_for_non_root_mpp_task[];
@@ -264,6 +266,39 @@ void MPPTask::preprocess()
     mpp_task_statistics.recordReadWaitIndex(*dag_context);
 }
 
+void MPPTask::updateMetrics(bool mpp_task_success)
+{
+    try
+    {
+        /// for failed/cancelled mpp task, we can still try to update metrics and collect runtime statistics.
+
+        const auto & return_statistics = mpp_task_statistics.collectRuntimeStatistics();
+        LOG_FMT_DEBUG(
+            log,
+            "finish write with {} rows, {} blocks, {} bytes",
+            return_statistics.rows,
+            return_statistics.blocks,
+            return_statistics.bytes);
+
+        auto throughput = dag_context->getTableScanThroughput();
+        if (throughput.first)
+            GET_METRIC(tiflash_storage_logical_throughput_bytes).Observe(throughput.second);
+        const auto * process_list_elem = context->getProcessListElement();
+        auto process_info = context->getProcessListElement()->getInfo();
+        auto peak_memory = process_info.peak_memory_usage > 0 ? process_info.peak_memory_usage : 0;
+        GET_METRIC(tiflash_coprocessor_request_memory_usage, type_run_mpp_task).Observe(peak_memory);
+        mpp_task_statistics.setMemoryPeak(peak_memory);
+    }
+    catch (...)
+    {
+        LOG_FMT_ERROR(
+            log,
+            "update metrics for {} mpp task meets error: {}",
+            mpp_task_success ? "successful" : "failed/cancelled",
+            getCurrentExceptionMessage(false, true));
+    }
+}
+
 void MPPTask::runImpl()
 {
     CPUAffinityManager::getInstance().bindSelfQueryThread();
@@ -282,6 +317,15 @@ void MPPTask::runImpl()
     String err_msg;
     try
     {
+        if (dag_context->isRootMPPTask())
+        {
+            FAIL_POINT_TRIGGER_EXCEPTION(FailPoints::exception_before_mpp_prepare_for_root_mpp_task);
+        }
+        else
+        {
+            FAIL_POINT_TRIGGER_EXCEPTION(FailPoints::exception_before_mpp_prepare_for_non_root_mpp_task);
+        }
+
         LOG_FMT_INFO(log, "task starts preprocessing");
         preprocess();
         needed_threads = estimateCountOfNewThreads();
@@ -308,14 +352,6 @@ void MPPTask::runImpl()
 
         from->readSuffix();
         finishWrite();
-
-        const auto & return_statistics = mpp_task_statistics.collectRuntimeStatistics();
-        LOG_FMT_DEBUG(
-            log,
-            "finish write with {} rows, {} blocks, {} bytes",
-            return_statistics.rows,
-            return_statistics.blocks,
-            return_statistics.bytes);
     }
     catch (Exception & e)
     {
@@ -337,34 +373,17 @@ void MPPTask::runImpl()
         err_msg = "unrecovered error";
         LOG_FMT_ERROR(log, "task running meets error: {}", err_msg);
     }
-    if (err_msg.empty())
-    {
-        // todo when error happens, should try to update the metrics if it is available
-        auto throughput = dag_context->getTableScanThroughput();
-        if (throughput.first)
-            GET_METRIC(tiflash_storage_logical_throughput_bytes).Observe(throughput.second);
-        auto process_info = context->getProcessListElement()->getInfo();
-        auto peak_memory = process_info.peak_memory_usage > 0 ? process_info.peak_memory_usage : 0;
-        GET_METRIC(tiflash_coprocessor_request_memory_usage, type_run_mpp_task).Observe(peak_memory);
-        mpp_task_statistics.setMemoryPeak(peak_memory);
-    }
-    else
+
+    if (!err_msg.empty())
     {
         context->getProcessList().sendCancelToQuery(context->getCurrentQueryId(), context->getClientInfo().current_user, true);
         if (dag_context)
             dag_context->cancelAllExchangeReceiver();
         writeErrToAllTunnels(err_msg);
-
-        /// for fail mpp task, we can still try to collect runtime statistics.
-        try
-        {
-            mpp_task_statistics.collectRuntimeStatistics();
-        }
-        catch (...)
-        {
-            LOG_FMT_ERROR(log, "collect runtime statistics for failed mpp task meets error: {}", getCurrentExceptionMessage(false, true));
-        }
     }
+
+    updateMetrics(err_msg.empty());
+
     LOG_FMT_INFO(log, "task ends, time cost is {} ms.", stopwatch.elapsedMilliseconds());
     unregisterTask();
 

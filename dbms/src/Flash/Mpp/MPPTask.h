@@ -66,6 +66,8 @@ public:
 
     int getNeededThreads();
 
+    void updateMetrics(bool mpp_task_success);
+
     enum class ScheduleState
     {
         WAITING,

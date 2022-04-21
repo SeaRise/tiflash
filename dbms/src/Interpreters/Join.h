@@ -114,11 +114,6 @@ public:
       */
     void init(const Block & sample_block);
 
-    /** Add block of data from right hand of JOIN to the map.
-      * Returns false, if some limit was exceeded and you should not insert more data.
-      */
-    bool insertFromBlockInternal(Block * stored_block, size_t stream_index);
-
     bool insertFromBlock(const Block & block);
 
     void insertFromBlock(const Block & block, size_t stream_index);
@@ -362,6 +357,11 @@ private:
     {
         return getBuildConcurrencyInternal();
     }
+
+    /** Add block of data from right hand of JOIN to the map.
+      * Returns false, if some limit was exceeded and you should not insert more data.
+      */
+    bool insertFromBlockInternal(Block * stored_block, size_t stream_index);
 
     void init(Type type_);
 

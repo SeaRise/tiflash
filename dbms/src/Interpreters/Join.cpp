@@ -98,6 +98,7 @@ Join::Join(
     ASTTableJoin::Kind kind_,
     ASTTableJoin::Strictness strictness_,
     const String & req_id,
+    size_t build_concurrency = 1,
     const TiDB::TiDBCollators & collators_,
     const String & left_filter_column_,
     const String & right_filter_column_,
@@ -126,6 +127,7 @@ Join::Join(
     , limits(limits)
 {
     build_set_exceeded.store(false);
+    setBuildConcurrencyAndInitPool(build_concurrency);
     if (other_condition_ptr != nullptr)
     {
         /// if there is other_condition, then should keep all the valid rows during probe stage
@@ -465,13 +467,12 @@ void Join::setSampleBlock(const Block & block)
         sample_block_with_columns_to_add.insert(ColumnWithTypeAndName(Join::match_helper_type, match_helper_name));
 }
 
-void Join::init(const Block & sample_block, size_t build_concurrency_)
+void Join::init(const Block & sample_block)
 {
     std::unique_lock lock(rwlock);
     if (unlikely(initialized))
         throw Exception("Logical error: Join has been initialized", ErrorCodes::LOGICAL_ERROR);
 
-    setBuildConcurrencyAndInitPool(build_concurrency_);
     setSampleBlock(sample_block);
     
     initialized = true;

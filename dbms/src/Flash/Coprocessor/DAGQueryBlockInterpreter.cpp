@@ -529,6 +529,8 @@ void DAGQueryBlockInterpreter::handleJoin(const tipb::Join & join, DAGPipeline &
     size_t max_block_size_for_cross_join = settings.max_block_size;
     fiu_do_on(FailPoints::minimum_block_size_for_cross_join, { max_block_size_for_cross_join = 1; });
 
+    size_t join_build_concurrency = settings.join_concurrent_build ? std::min(max_streams, build_pipeline.streams.size()) : 1;
+
     JoinPtr join_ptr = std::make_shared<Join>(
         probe_key_names,
         build_key_names,
@@ -537,6 +539,7 @@ void DAGQueryBlockInterpreter::handleJoin(const tipb::Join & join, DAGPipeline &
         tiflash_join.kind,
         tiflash_join.strictness,
         log->identifier(),
+        join_build_concurrency,
         tiflash_join.join_key_collators,
         probe_filter_column_name,
         build_filter_column_name,
@@ -556,8 +559,7 @@ void DAGQueryBlockInterpreter::handleJoin(const tipb::Join & join, DAGPipeline &
 
     right_query.source = build_pipeline.firstStream();
     right_query.join = join_ptr;
-    size_t join_build_concurrency = settings.join_concurrent_build ? std::min(max_streams, build_pipeline.streams.size()) : 1;
-    right_query.join->init(right_query.source->getHeader(), join_build_concurrency);
+    right_query.join->init(right_query.source->getHeader());
 
     NamesAndTypes source_columns;
     for (const auto & p : probe_pipeline.firstStream()->getHeader())

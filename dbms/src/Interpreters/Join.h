@@ -99,6 +99,7 @@ public:
          ASTTableJoin::Kind kind_,
          ASTTableJoin::Strictness strictness_,
          const String & req_id,
+         size_t build_concurrency = 1,
          const TiDB::TiDBCollators & collators_ = TiDB::dummy_collators,
          const String & left_filter_column = "",
          const String & right_filter_column = "",
@@ -111,7 +112,7 @@ public:
     /** Call `setSampleBlock` and `setBuildConcurrencyAndInitPool`.
       * You must call this method before subsequent calls to insertFromBlock.
       */
-    void init(const Block & sample_block, size_t build_concurrency_ = 1);
+    void init(const Block & sample_block);
 
     /** Add block of data from right hand of JOIN to the map.
       * Returns false, if some limit was exceeded and you should not insert more data.

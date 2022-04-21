@@ -98,7 +98,7 @@ Join::Join(
     ASTTableJoin::Kind kind_,
     ASTTableJoin::Strictness strictness_,
     const String & req_id,
-    size_t build_concurrency = 1,
+    size_t build_concurrency,
     const TiDB::TiDBCollators & collators_,
     const String & left_filter_column_,
     const String & right_filter_column_,

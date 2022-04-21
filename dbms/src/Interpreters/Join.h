@@ -108,7 +108,7 @@ public:
          size_t max_block_size = 0,
          const String & match_helper_name = "");
 
-    /** Call `init`, `setSampleBlock` and `setBuildConcurrencyAndInitPool`.
+    /** Call `setSampleBlock` and `setBuildConcurrencyAndInitPool`.
       * You must call this method before subsequent calls to insertFromBlock.
       */
     void init(const Block & sample_block, size_t build_concurrency_ = 1);
@@ -287,7 +287,7 @@ private:
     /// Substitute NULLs for non-JOINed rows.
     bool use_nulls;
 
-    std::atomic<size_t> build_concurrency;
+    size_t build_concurrency;
     std::atomic_bool build_set_exceeded;
     /// collators for the join key
     const TiDB::TiDBCollators collators;

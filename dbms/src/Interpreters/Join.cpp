@@ -470,9 +470,11 @@ void Join::init(const Block & sample_block, size_t build_concurrency_)
     std::unique_lock lock(rwlock);
     if (unlikely(initialized))
         throw Exception("Logical error: Join has been initialized", ErrorCodes::LOGICAL_ERROR);
-    initialized = true;
+
     setBuildConcurrencyAndInitPool(build_concurrency_);
     setSampleBlock(sample_block);
+    
+    initialized = true;
 }
 
 

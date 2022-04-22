@@ -48,7 +48,7 @@ class DAGStorageInterpreter
 public:
     DAGStorageInterpreter(
         Context & context_,
-        const TiDBStorageTable & storage_table_,
+        const TiDBTableScan & table_scan_,
         const String & pushed_down_filter_id_,
         const std::vector<const tipb::Expr *> & pushed_down_conditions_,
         size_t max_streams_);
@@ -56,9 +56,9 @@ public:
     DAGStorageInterpreter(DAGStorageInterpreter &&) = delete;
     DAGStorageInterpreter & operator=(DAGStorageInterpreter &&) = delete;
 
-    void execute(DAGPipeline & pipeline);
+    std::unique_ptr<TiDBStorageTable> execute(DAGPipeline & pipeline);
 
-    /// Members will be transfered to DAGQueryBlockInterpreter after execute
+    /// Members will be transferred to DAGQueryBlockInterpreter after execute
 
     std::unique_ptr<DAGExpressionAnalyzer> analyzer;
     std::vector<ExtraCastAfterTSMode> is_need_add_cast_column;
@@ -72,16 +72,16 @@ private:
 
     LearnerReadSnapshot doBatchCopLearnerRead();
 
-    void doLocalRead(DAGPipeline & pipeline, size_t max_block_size);
+    void doLocalRead(const TiDBStorageTable & storage_table, DAGPipeline & pipeline, size_t max_block_size);
 
-    void buildRemoteRequests();
+    void buildRemoteRequests(const TiDBStorageTable & storage_table);
 
     std::unordered_map<TableID, SelectQueryInfo> generateSelectQueryInfos();
 
     /// passed from caller, doesn't change during DAGStorageInterpreter's lifetime
 
     Context & context;
-    const TiDBStorageTable & storage_table;
+    const TiDBTableScan & table_scan;
     const String & pushed_down_filter_id;
     const std::vector<const tipb::Expr *> & pushed_down_conditions;
     size_t max_streams;
@@ -98,7 +98,6 @@ private:
     std::unique_ptr<MvccQueryInfo> mvcc_query_info;
     // We need to validate regions snapshot after getting streams from storage.
     LearnerReadSnapshot learner_read_snapshot;
-    NamesAndTypes source_columns;
 };
 
 } // namespace DB

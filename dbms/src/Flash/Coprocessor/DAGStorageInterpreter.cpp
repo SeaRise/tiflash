@@ -26,6 +26,8 @@
 #include <Storages/Transaction/LockException.h>
 #include <Storages/Transaction/SchemaSyncer.h>
 
+#include "Flash/Coprocessor/TiDBTableScan.h"
+
 namespace DB
 {
 namespace FailPoints
@@ -152,26 +154,25 @@ std::vector<ExtraCastAfterTSMode> getExtraCastAfterTSModeFromTS(const TiDBTableS
 
 DAGStorageInterpreter::DAGStorageInterpreter(
     Context & context_,
-    const TiDBStorageTable & storage_table_,
+    const TiDBTableScan & table_scan_,
     const String & pushed_down_filter_id_,
     const std::vector<const tipb::Expr *> & pushed_down_conditions_,
     size_t max_streams_)
     : context(context_)
-    , storage_table(storage_table_)
+    , table_scan(table_scan_)
     , pushed_down_filter_id(pushed_down_filter_id_)
     , pushed_down_conditions(pushed_down_conditions_)
     , max_streams(max_streams_)
     , log(Logger::get("DAGStorageInterpreter", context.getDAGContext()->log ? context.getDAGContext()->log->identifier() : ""))
-    , logical_table_id(storage_table.getTiDBTableScan().getLogicalTableID())
+    , logical_table_id(table_scan.getLogicalTableID())
     , settings(context.getSettingsRef())
     , tmt(context.getTMTContext())
     , mvcc_query_info(new MvccQueryInfo(true, settings.read_tso))
 {
-    source_columns = storage_table.getSchema();
-    is_need_add_cast_column = getExtraCastAfterTSModeFromTS(storage_table.getTiDBTableScan());
+    is_need_add_cast_column = getExtraCastAfterTSModeFromTS(table_scan);
 }
 
-void DAGStorageInterpreter::execute(DAGPipeline & pipeline)
+std::unique_ptr<TiDBStorageTable> DAGStorageInterpreter::execute(DAGPipeline & pipeline)
 {
     const DAGContext & dag_context = *context.getDAGContext();
     if (dag_context.isBatchCop() || dag_context.isMPPTask())
@@ -179,27 +180,30 @@ void DAGStorageInterpreter::execute(DAGPipeline & pipeline)
     else
         learner_read_snapshot = doCopLearnerRead();
 
-    analyzer = std::make_unique<DAGExpressionAnalyzer>(std::move(source_columns), context);
+    std::unique_ptr<TiDBStorageTable> storage_table = std::make_unique<TiDBStorageTable>(table_scan, context, log->identifier());
+    storage_table->getAndLockStorages();
+    analyzer = std::make_unique<DAGExpressionAnalyzer>(storage_table->getSchema(), context);
 
     FAIL_POINT_PAUSE(FailPoints::pause_after_learner_read);
 
     if (!mvcc_query_info->regions_query_info.empty())
-        doLocalRead(pipeline, settings.max_block_size);
+        doLocalRead(*storage_table, pipeline, settings.max_block_size);
 
-    null_stream_if_empty = std::make_shared<NullBlockInputStream>(storage_table.getSampleBlock());
+    null_stream_if_empty = std::make_shared<NullBlockInputStream>(storage_table->getSampleBlock());
 
     // Should build these vars under protect of `table_structure_lock`.
-    buildRemoteRequests();
+    buildRemoteRequests(*storage_table);
+    return storage_table;
 }
 
 LearnerReadSnapshot DAGStorageInterpreter::doCopLearnerRead()
 {
-    if (storage_table.getTiDBTableScan().isPartitionTableScan())
+    if (table_scan.isPartitionTableScan())
     {
         throw Exception("Cop request does not support partition table scan");
     }
     TablesRegionInfoMap regions_for_local_read;
-    for (const auto physical_table_id : storage_table.getTiDBTableScan().getPhysicalTableIDs())
+    for (const auto physical_table_id : table_scan.getPhysicalTableIDs())
     {
         regions_for_local_read.emplace(physical_table_id, std::cref(context.getDAGContext()->getTableRegionsInfoByTableID(physical_table_id).local_regions));
     }
@@ -220,7 +224,7 @@ LearnerReadSnapshot DAGStorageInterpreter::doCopLearnerRead()
 LearnerReadSnapshot DAGStorageInterpreter::doBatchCopLearnerRead()
 {
     TablesRegionInfoMap regions_for_local_read;
-    for (const auto physical_table_id : storage_table.getTiDBTableScan().getPhysicalTableIDs())
+    for (const auto physical_table_id : table_scan.getPhysicalTableIDs())
     {
         const auto & local_regions = context.getDAGContext()->getTableRegionsInfoByTableID(physical_table_id).local_regions;
         regions_for_local_read.emplace(physical_table_id, std::cref(local_regions));
@@ -288,9 +292,9 @@ std::unordered_map<TableID, SelectQueryInfo> DAGStorageInterpreter::generateSele
         query_info.req_id = fmt::format("{} Table<{}>", log->identifier(), table_id);
         return query_info;
     };
-    if (storage_table.getTiDBTableScan().isPartitionTableScan())
+    if (table_scan.isPartitionTableScan())
     {
-        for (const auto physical_table_id : storage_table.getTiDBTableScan().getPhysicalTableIDs())
+        for (const auto physical_table_id : table_scan.getPhysicalTableIDs())
         {
             SelectQueryInfo query_info = create_query_info(physical_table_id);
             query_info.mvcc_query_info = std::make_unique<MvccQueryInfo>(mvcc_query_info->resolve_locks, mvcc_query_info->read_tso);
@@ -316,7 +320,7 @@ std::unordered_map<TableID, SelectQueryInfo> DAGStorageInterpreter::generateSele
     return ret;
 }
 
-void DAGStorageInterpreter::doLocalRead(DAGPipeline & pipeline, size_t max_block_size)
+void DAGStorageInterpreter::doLocalRead(const TiDBStorageTable & storage_table, DAGPipeline & pipeline, size_t max_block_size)
 {
     const DAGContext & dag_context = *context.getDAGContext();
     size_t total_local_region_num = mvcc_query_info->regions_query_info.size();
@@ -460,7 +464,7 @@ void DAGStorageInterpreter::buildRemoteRequests()
 {
     std::unordered_map<Int64, Int64> region_id_to_table_id_map;
     std::unordered_map<Int64, RegionRetryList> retry_regions_map;
-    for (const auto physical_table_id : storage_table.getTiDBTableScan().getPhysicalTableIDs())
+    for (const auto physical_table_id : table_scan.getPhysicalTableIDs())
     {
         const auto & table_regions_info = context.getDAGContext()->getTableRegionsInfoByTableID(physical_table_id);
         for (const auto & e : table_regions_info.local_regions)
@@ -475,7 +479,7 @@ void DAGStorageInterpreter::buildRemoteRequests()
     }
 
 
-    for (const auto physical_table_id : storage_table.getTiDBTableScan().getPhysicalTableIDs())
+    for (const auto physical_table_id : table_scan.getPhysicalTableIDs())
     {
         const auto & retry_regions = retry_regions_map[physical_table_id];
         if (retry_regions.empty())
@@ -487,7 +491,7 @@ void DAGStorageInterpreter::buildRemoteRequests()
         remote_requests.push_back(RemoteRequest::build(
             retry_regions,
             *context.getDAGContext(),
-            storage_table.getTiDBTableScan(),
+            table_scan,
             storage_table.getStorage(physical_table_id)->getTableInfo(),
             pushed_down_filter_id,
             pushed_down_conditions,

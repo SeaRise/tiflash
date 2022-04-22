@@ -36,12 +36,12 @@ struct StorageWithStructureLock
 
 using IDsAndStorageWithStructureLocks = std::unordered_map<TableID, StorageWithStructureLock>;
 
+// A logical storage object
 class TiDBStorageTable
 {
 public:
     TiDBStorageTable(
-        const tipb::Executor * table_scan_,
-        const String & executor_id_,
+        const TiDBTableScan & table_scan_,
         Context & context_,
         const String & req_id);
 
@@ -49,6 +49,7 @@ public:
     const NamesAndTypes & getSchema() const { return schema; }
     const Names & getScanRequiredColumns() const { return scan_required_columns; }
 
+    void getAndLockStorages();
     void releaseAlterLocks();
 
     // func: void (const TableLockHolder &)
@@ -67,7 +68,6 @@ public:
     Block getSampleBlock() const;
 
 private:
-    IDsAndStorageWithStructureLocks getAndLockStorages(const TiDBTableScan & table_scan);
     NamesAndTypes getSchemaForTableScan(const TiDBTableScan & table_scan);
 
 private:
@@ -82,7 +82,7 @@ private:
     TMTContext & tmt;
     LoggerPtr log;
 
-    TiDBTableScan tidb_table_scan;
+    const TiDBTableScan & tidb_table_scan;
 
     // after `releaseAlterLocks`, all struct lock will call release and move to drop_locks,
     // and then lock_status will change to `alter`.

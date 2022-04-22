@@ -14,6 +14,7 @@
 
 #include <Common/TiFlashMetrics.h>
 #include <Flash/Coprocessor/TiDBStorageTable.h>
+#include <Flash/Coprocessor/TiDBTableScan.h>
 #include <Interpreters/Context.h>
 #include <Storages/Transaction/SchemaSyncer.h>
 #include <Storages/Transaction/TMTContext.h>
@@ -22,16 +23,13 @@
 namespace DB
 {
 TiDBStorageTable::TiDBStorageTable(
-    const tipb::Executor * table_scan_,
-    const String & executor_id_,
+    const TiDBTableScan & table_scan_,
     Context & context_,
     const String & req_id)
     : context(context_)
     , tmt(context.getTMTContext())
     , log(Logger::get("TiDBStorageTable", req_id))
-    , tidb_table_scan(table_scan_, executor_id_, *context.getDAGContext())
-    , storages_with_structure_lock(getAndLockStorages(tidb_table_scan))
-    , storage_for_logical_table(getStorage(tidb_table_scan.getLogicalTableID()))
+    , tidb_table_scan(table_scan_)
     , schema(getSchemaForTableScan(tidb_table_scan))
 {
     assert(scan_required_columns.empty());
@@ -64,11 +62,15 @@ const ManageableStoragePtr & TiDBStorageTable::getStorage(TableID table_id) cons
     return it->second.storage;
 }
 
-IDsAndStorageWithStructureLocks TiDBStorageTable::getAndLockStorages(const TiDBTableScan & table_scan)
+void TiDBStorageTable::getAndLockStorages()
 {
-    Int64 query_schema_version = context.getSettingsRef().schema_version;
-    auto logical_table_id = table_scan.getLogicalTableID();
+    const Int64 query_schema_version = context.getSettingsRef().schema_version;
+    const auto logical_table_id = tidb_table_scan.getLogicalTableID();
+    // a temporary object to save storages and locks, only move it to
+    // `this->storages_with_structure_lock` after all success.
     IDsAndStorageWithStructureLocks storages_with_lock;
+
+    // shortcut for mock test
     if (unlikely(query_schema_version == DEFAULT_UNSPECIFIED_SCHEMA_VERSION))
     {
         auto logical_table_storage = tmt.getStorages().get(logical_table_id);
@@ -77,9 +79,9 @@ IDsAndStorageWithStructureLocks TiDBStorageTable::getAndLockStorages(const TiDBT
             throw TiFlashException(fmt::format("Table {} doesn't exist.", logical_table_id), Errors::Table::NotExists);
         }
         storages_with_lock[logical_table_id] = {logical_table_storage, logical_table_storage->lockStructureForShare(context.getCurrentQueryId())};
-        if (table_scan.isPartitionTableScan())
+        if (tidb_table_scan.isPartitionTableScan())
         {
-            for (auto const physical_table_id : table_scan.getPhysicalTableIDs())
+            for (auto const physical_table_id : tidb_table_scan.getPhysicalTableIDs())
             {
                 auto physical_table_storage = tmt.getStorages().get(physical_table_id);
                 if (!physical_table_storage)
@@ -89,7 +91,7 @@ IDsAndStorageWithStructureLocks TiDBStorageTable::getAndLockStorages(const TiDBT
                 storages_with_lock[physical_table_id] = {physical_table_storage, physical_table_storage->lockStructureForShare(context.getCurrentQueryId())};
             }
         }
-        return storages_with_lock;
+        storages_with_structure_lock.swap(storages_with_lock);
     }
 
     auto global_schema_version = tmt.getSchemaSyncer()->getCurrentVersion();
@@ -158,11 +160,11 @@ IDsAndStorageWithStructureLocks TiDBStorageTable::getAndLockStorages(const TiDBT
         table_storages.emplace_back(std::move(logical_table_storage));
         table_locks.emplace_back(std::move(logical_table_lock));
         table_schema_versions.push_back(logical_table_storage_schema_version);
-        if (!table_scan.isPartitionTableScan())
+        if (!tidb_table_scan.isPartitionTableScan())
         {
             return {table_storages, table_locks, table_schema_versions, true};
         }
-        for (auto const physical_table_id : table_scan.getPhysicalTableIDs())
+        for (auto const physical_table_id : tidb_table_scan.getPhysicalTableIDs())
         {
             auto [physical_table_storage, physical_table_lock, physical_table_storage_schema_version, ok] = get_and_lock_storage(schema_synced, physical_table_id);
             if (!ok)
@@ -179,12 +181,12 @@ IDsAndStorageWithStructureLocks TiDBStorageTable::getAndLockStorages(const TiDBT
     auto log_schema_version = [&](const String & result, const std::vector<Int64> & storage_schema_versions) {
         FmtBuffer buffer;
         buffer.fmtAppend("Table {} schema {} Schema version [storage, global, query]: [{}, {}, {}]", logical_table_id, result, storage_schema_versions[0], global_schema_version, query_schema_version);
-        if (table_scan.isPartitionTableScan())
+        if (tidb_table_scan.isPartitionTableScan())
         {
-            assert(storage_schema_versions.size() == 1 + table_scan.getPhysicalTableIDs().size());
-            for (size_t i = 0; i < table_scan.getPhysicalTableIDs().size(); ++i)
+            assert(storage_schema_versions.size() == 1 + tidb_table_scan.getPhysicalTableIDs().size());
+            for (size_t i = 0; i < tidb_table_scan.getPhysicalTableIDs().size(); ++i)
             {
-                const auto physical_table_id = table_scan.getPhysicalTableIDs()[i];
+                const auto physical_table_id = tidb_table_scan.getPhysicalTableIDs()[i];
                 buffer.fmtAppend(", Table {} schema {} Schema version [storage, global, query]: [{}, {}, {}]", physical_table_id, result, storage_schema_versions[1 + i], global_schema_version, query_schema_version);
             }
         }
@@ -225,7 +227,10 @@ IDsAndStorageWithStructureLocks TiDBStorageTable::getAndLockStorages(const TiDBT
         auto const table_id = storages[i]->getTableInfo().id;
         storages_with_lock[table_id] = {std::move(storages[i]), std::move(locks[i])};
     }
-    return storages_with_lock;
+
+    // keep the storage and lock after all success
+    storages_with_structure_lock.swap(storages_with_lock);
+    storage_for_logical_table = getStorage(logical_table_id);
 }
 
 NamesAndTypes TiDBStorageTable::getSchemaForTableScan(const TiDBTableScan & table_scan)

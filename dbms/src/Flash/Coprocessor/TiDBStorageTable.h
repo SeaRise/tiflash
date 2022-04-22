@@ -36,20 +36,20 @@ struct StorageWithStructureLock
 
 using IDsAndStorageWithStructureLocks = std::unordered_map<TableID, StorageWithStructureLock>;
 
-// A logical storage object
+// A logical storage object that contains IStorages for table scan / partition table scan.
+// It also hold structure locks of IStorages for building query schema without concurrent
+// issue with DDL operations.
 class TiDBStorageTable
 {
 public:
-    TiDBStorageTable(
+    static std::unique_ptr<TiDBStorageTable> buildAndLockStorages(
         const TiDBTableScan & table_scan_,
         Context & context_,
         const String & req_id);
 
-    const TiDBTableScan & getTiDBTableScan() const { return tidb_table_scan; }
     const NamesAndTypes & getSchema() const { return schema; }
     const Names & getScanRequiredColumns() const { return scan_required_columns; }
 
-    void getAndLockStorages();
     void releaseAlterLocks();
 
     // func: void (const TableLockHolder &)
@@ -68,7 +68,14 @@ public:
     Block getSampleBlock() const;
 
 private:
+    IDsAndStorageWithStructureLocks getAndLockStorages();
+
     NamesAndTypes getSchemaForTableScan(const TiDBTableScan & table_scan);
+
+    TiDBStorageTable(
+        const TiDBTableScan & table_scan_,
+        Context & context_,
+        const String & req_id);
 
 private:
     enum TableLockStatus

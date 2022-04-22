@@ -19,14 +19,13 @@
 #include <Flash/Coprocessor/DAGQueryInfo.h>
 #include <Flash/Coprocessor/DAGStorageInterpreter.h>
 #include <Flash/Coprocessor/TiDBStorageTable.h>
+#include <Flash/Coprocessor/TiDBTableScan.h>
 #include <Parsers/makeDummyQuery.h>
 #include <Storages/IManageableStorage.h>
 #include <Storages/MutableSupport.h>
 #include <Storages/Transaction/KVStore.h>
 #include <Storages/Transaction/LockException.h>
 #include <Storages/Transaction/SchemaSyncer.h>
-
-#include "Flash/Coprocessor/TiDBTableScan.h"
 
 namespace DB
 {
@@ -174,20 +173,32 @@ DAGStorageInterpreter::DAGStorageInterpreter(
 
 std::unique_ptr<TiDBStorageTable> DAGStorageInterpreter::execute(DAGPipeline & pipeline)
 {
+    // Assume that:
+    // 1. Read threads do learner read and get blocks with structure lock of an IStorage X
+    // 2. Raft threads need to remove Region in the same IStorage X
+    // then Raft threads will try to acquire for table's structure lock and be stuck by the read
+    // threads. Finally, it will block all Raft threads and deadlocks happens.
+    // So we must do learner read without structure lock on IStorage. After that, acquire the
+    // structure lock of IStorage(s) (to avoid concurrent issues between read threads and DDL
+    // operations) and build the requested inputstreams
+    // TODO: If we can acquire a read-only view on the IStorage structure (both `ITableDeclaration`
+    // and `TiDB::TableInfo`) we may get this process more simplified.
+
+    // 1. Do learner read
     const DAGContext & dag_context = *context.getDAGContext();
     if (dag_context.isBatchCop() || dag_context.isMPPTask())
         learner_read_snapshot = doBatchCopLearnerRead();
     else
         learner_read_snapshot = doCopLearnerRead();
 
-    std::unique_ptr<TiDBStorageTable> storage_table = std::make_unique<TiDBStorageTable>(table_scan, context, log->identifier());
-    storage_table->getAndLockStorages();
+    // 2. Build the requested inputstreams
+    std::unique_ptr<TiDBStorageTable> storage_table = TiDBStorageTable::buildAndLockStorages(table_scan, context, log->identifier());
     analyzer = std::make_unique<DAGExpressionAnalyzer>(storage_table->getSchema(), context);
 
     FAIL_POINT_PAUSE(FailPoints::pause_after_learner_read);
 
     if (!mvcc_query_info->regions_query_info.empty())
-        doLocalRead(*storage_table, pipeline, settings.max_block_size);
+        buildLocalRead(*storage_table, pipeline, settings.max_block_size);
 
     null_stream_if_empty = std::make_shared<NullBlockInputStream>(storage_table->getSampleBlock());
 
@@ -320,7 +331,7 @@ std::unordered_map<TableID, SelectQueryInfo> DAGStorageInterpreter::generateSele
     return ret;
 }
 
-void DAGStorageInterpreter::doLocalRead(const TiDBStorageTable & storage_table, DAGPipeline & pipeline, size_t max_block_size)
+void DAGStorageInterpreter::buildLocalRead(const TiDBStorageTable & storage_table, DAGPipeline & pipeline, size_t max_block_size)
 {
     const DAGContext & dag_context = *context.getDAGContext();
     size_t total_local_region_num = mvcc_query_info->regions_query_info.size();
@@ -460,7 +471,7 @@ void DAGStorageInterpreter::doLocalRead(const TiDBStorageTable & storage_table, 
     }
 }
 
-void DAGStorageInterpreter::buildRemoteRequests()
+void DAGStorageInterpreter::buildRemoteRequests(const TiDBStorageTable & storage_table)
 {
     std::unordered_map<Int64, Int64> region_id_to_table_id_map;
     std::unordered_map<Int64, RegionRetryList> retry_regions_map;

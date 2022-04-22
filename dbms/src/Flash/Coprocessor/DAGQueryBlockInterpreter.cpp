@@ -265,6 +265,9 @@ void DAGQueryBlockInterpreter::handleTableScan(TiDBTableScan && table_scan, DAGP
     DAGStorageInterpreter storage_interpreter(context, table_scan, query_block.selection_name, conditions, max_streams);
     auto storage_table = storage_interpreter.execute(pipeline);
 
+    // DAGStorageInterpreter ensures that once input streams are created, the caller can get a consistent result
+    // from those streams even if DDL operations are applied. Release the alter lock so that reading does not
+    // block DDL operations, keep the drop lock so that the storage not to be dropped during reading.
     storage_table->releaseAlterLocks();
 
     analyzer = std::move(storage_interpreter.analyzer);
@@ -1036,7 +1039,7 @@ void DAGQueryBlockInterpreter::executeImpl(DAGPipeline & pipeline)
     else if (query_block.isTableScanSource())
     {
         TiDBTableScan table_scan(query_block.source, query_block.source_name, dagContext());
-        handleTableScan(std::move(table_scan), pipeline);
+        handleTableScan(table_scan, pipeline);
         dagContext().table_scan_executor_id = query_block.source_name;
     }
     else

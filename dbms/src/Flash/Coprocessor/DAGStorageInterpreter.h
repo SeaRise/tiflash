@@ -72,7 +72,7 @@ private:
 
     LearnerReadSnapshot doBatchCopLearnerRead();
 
-    void doLocalRead(const TiDBStorageTable & storage_table, DAGPipeline & pipeline, size_t max_block_size);
+    void buildLocalRead(const TiDBStorageTable & storage_table, DAGPipeline & pipeline, size_t max_block_size);
 
     void buildRemoteRequests(const TiDBStorageTable & storage_table);
 

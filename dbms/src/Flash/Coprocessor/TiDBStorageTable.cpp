@@ -22,6 +22,21 @@
 
 namespace DB
 {
+std::unique_ptr<TiDBStorageTable> TiDBStorageTable::buildAndLockStorages(
+    const TiDBTableScan & table_scan,
+    Context & context,
+    const String & req_id)
+{
+    auto table = std::unique_ptr<TiDBStorageTable>(new TiDBStorageTable(table_scan, context, req_id));
+    table->storages_with_structure_lock = table->getAndLockStorages();
+    table->storage_for_logical_table = table->getStorage(table_scan.getLogicalTableID());
+    table->schema = table->getSchemaForTableScan(table_scan);
+    assert(table->scan_required_columns.empty());
+    for (const auto & column : table->schema)
+        table->scan_required_columns.push_back(column.name);
+    return table;
+}
+
 TiDBStorageTable::TiDBStorageTable(
     const TiDBTableScan & table_scan_,
     Context & context_,
@@ -30,11 +45,7 @@ TiDBStorageTable::TiDBStorageTable(
     , tmt(context.getTMTContext())
     , log(Logger::get("TiDBStorageTable", req_id))
     , tidb_table_scan(table_scan_)
-    , schema(getSchemaForTableScan(tidb_table_scan))
 {
-    assert(scan_required_columns.empty());
-    for (const auto & column : schema)
-        scan_required_columns.push_back(column.name);
 }
 
 Block TiDBStorageTable::getSampleBlock() const
@@ -62,12 +73,10 @@ const ManageableStoragePtr & TiDBStorageTable::getStorage(TableID table_id) cons
     return it->second.storage;
 }
 
-void TiDBStorageTable::getAndLockStorages()
+IDsAndStorageWithStructureLocks TiDBStorageTable::getAndLockStorages()
 {
     const Int64 query_schema_version = context.getSettingsRef().schema_version;
     const auto logical_table_id = tidb_table_scan.getLogicalTableID();
-    // a temporary object to save storages and locks, only move it to
-    // `this->storages_with_structure_lock` after all success.
     IDsAndStorageWithStructureLocks storages_with_lock;
 
     // shortcut for mock test
@@ -91,7 +100,7 @@ void TiDBStorageTable::getAndLockStorages()
                 storages_with_lock[physical_table_id] = {physical_table_storage, physical_table_storage->lockStructureForShare(context.getCurrentQueryId())};
             }
         }
-        storages_with_structure_lock.swap(storages_with_lock);
+        return storages_with_lock;
     }
 
     auto global_schema_version = tmt.getSchemaSyncer()->getCurrentVersion();
@@ -229,8 +238,7 @@ void TiDBStorageTable::getAndLockStorages()
     }
 
     // keep the storage and lock after all success
-    storages_with_structure_lock.swap(storages_with_lock);
-    storage_for_logical_table = getStorage(logical_table_id);
+    return storages_with_lock;
 }
 
 NamesAndTypes TiDBStorageTable::getSchemaForTableScan(const TiDBTableScan & table_scan)

@@ -55,7 +55,7 @@ public:
 
 private:
     void executeImpl(DAGPipeline & pipeline);
-    void handleTableScan(TiDBTableScan && table_scan, DAGPipeline & pipeline);
+    void handleTableScan(const TiDBTableScan & table_scan, DAGPipeline & pipeline);
     void executeCastAfterTableScan(
         const TiDBTableScan & table_scan,
         const std::vector<ExtraCastAfterTSMode> & is_need_add_cast_column,

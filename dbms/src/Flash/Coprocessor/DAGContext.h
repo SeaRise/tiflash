@@ -29,6 +29,7 @@
 #include <DataStreams/IBlockInputStream.h>
 #include <Flash/Coprocessor/TablesRegionsInfo.h>
 #include <Flash/Mpp/MPPTaskId.h>
+#include <Flash/Statistics/Tracker.h>
 #include <Interpreters/SubqueryForSet.h>
 #include <Storages/Transaction/TiDB.h>
 
@@ -303,6 +304,8 @@ public:
     RegionInfoList retry_regions;
 
     LoggerPtr log;
+
+    TrackerPtr tracker;
 
     // initialized in `initOutputInfo`.
     std::vector<tipb::FieldType> result_field_types;

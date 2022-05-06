@@ -18,6 +18,7 @@
 #include <DataStreams/CreatingSetsBlockInputStream.h>
 #include <DataStreams/IBlockOutputStream.h>
 #include <DataStreams/materializeBlock.h>
+#include <Flash/Statistics/Tracker.h>
 #include <Interpreters/Join.h>
 #include <Interpreters/Set.h>
 #include <Storages/IStorage.h>
@@ -140,6 +141,12 @@ void CreatingSetsBlockInputStream::createAll()
         }
 
         thread_manager->wait();
+        // log tracing json after all build side stream finished
+        if (likely(tracker))
+        {
+            tracker->collectRuntimeStatistics();
+            tracker->logTracingJson();
+        }
 
         if (!exception_from_workers.empty())
         {

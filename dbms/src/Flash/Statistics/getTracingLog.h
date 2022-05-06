@@ -12,12 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <Flash/Mpp/getMPPTaskTracingLog.h>
+#pragma once
+
+#include <Common/Logger.h>
+#include <Flash/Mpp/MPPTaskId.h>
 
 namespace DB
 {
-LoggerPtr getMPPTaskTracingLog(const MPPTaskId & mpp_task_id)
-{
-    return Logger::get(tracing_log_source, mpp_task_id.toString());
-}
+/// Tracing logs are filtered by SourceFilterChannel.
+inline constexpr auto tracing_log_source = "tracing";
+
+/// All tracing logs must logged by the logger that got by `getTracingLog`.
+LoggerPtr getTracingLog(const String & req_id);
 } // namespace DB

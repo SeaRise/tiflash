@@ -55,7 +55,6 @@ MPPTask::MPPTask(const mpp::TaskMeta & meta_, const ContextPtr & context_)
     , meta(meta_)
     , id(meta.start_ts(), meta.task_id())
     , log(Logger::get("MPPTask", id.toString()))
-    , mpp_task_statistics(id, meta.address())
     , schedule_state(ScheduleState::WAITING)
 {}
 
@@ -197,6 +196,8 @@ void MPPTask::prepare(const mpp::DispatchTaskRequest & task_request)
     }
     dag_context = std::make_unique<DAGContext>(dag_req, task_request.meta(), is_root_mpp_task);
     dag_context->log = log;
+    mpp_tracker = std::make_shared<MPPTracker>(id, meta.address());
+    dag_context->tracker = mpp_tracker;
     dag_context->tables_regions_info = std::move(tables_regions_info);
     dag_context->tidb_host = context->getClientInfo().current_address.toString();
     context->setDAGContext(dag_context.get());
@@ -249,8 +250,8 @@ void MPPTask::prepare(const mpp::DispatchTaskRequest & task_request)
         throw TiFlashException(std::string(__PRETTY_FUNCTION__) + ": Failed to register MPP Task", Errors::Coprocessor::BadRequest);
     }
 
-    mpp_task_statistics.initializeExecutorDAG(dag_context.get());
-    mpp_task_statistics.logTracingJson();
+    mpp_tracker->initializeExecutorDAG(dag_context.get());
+    mpp_tracker->logTracingJson();
 }
 
 void MPPTask::preprocess()
@@ -260,8 +261,8 @@ void MPPTask::preprocess()
     executeQuery(dag, *context, false, QueryProcessingStage::Complete);
     auto end_time = Clock::now();
     dag_context->compile_time_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end_time - start_time).count();
-    mpp_task_statistics.setCompileTimestamp(start_time, end_time);
-    mpp_task_statistics.recordReadWaitIndex(*dag_context);
+    mpp_tracker->setCompileTimestamp(start_time, end_time);
+    mpp_tracker->recordReadWaitIndex(*dag_context);
 }
 
 void MPPTask::runImpl()
@@ -298,7 +299,7 @@ void MPPTask::runImpl()
             /// current task is not registered yet, so need to check the task status explicitly
             throw Exception("task not in running state, may be cancelled");
         }
-        mpp_task_statistics.start();
+        mpp_tracker->start();
         auto from = dag_context->getBlockIO().in;
         from->readPrefix();
         LOG_DEBUG(log, "begin read ");
@@ -308,14 +309,6 @@ void MPPTask::runImpl()
 
         from->readSuffix();
         finishWrite();
-
-        const auto & return_statistics = mpp_task_statistics.collectRuntimeStatistics();
-        LOG_FMT_DEBUG(
-            log,
-            "finish write with {} rows, {} blocks, {} bytes",
-            return_statistics.rows,
-            return_statistics.blocks,
-            return_statistics.bytes);
     }
     catch (Exception & e)
     {
@@ -337,6 +330,16 @@ void MPPTask::runImpl()
         err_msg = "unrecovered error";
         LOG_FMT_ERROR(log, "task running meets error: {}", err_msg);
     }
+
+    /// Runtime statistics are collected whether the mpp task fail or succeed.
+    const auto & return_statistics = mpp_tracker->collectRuntimeStatistics();
+    LOG_FMT_DEBUG(
+        log,
+        "finish write with {} rows, {} blocks, {} bytes",
+        return_statistics.rows,
+        return_statistics.blocks,
+        return_statistics.bytes);
+
     if (err_msg.empty())
     {
         // todo when error happens, should try to update the metrics if it is available
@@ -346,7 +349,7 @@ void MPPTask::runImpl()
         auto process_info = context->getProcessListElement()->getInfo();
         auto peak_memory = process_info.peak_memory_usage > 0 ? process_info.peak_memory_usage : 0;
         GET_METRIC(tiflash_coprocessor_request_memory_usage, type_run_mpp_task).Observe(peak_memory);
-        mpp_task_statistics.setMemoryPeak(peak_memory);
+        mpp_tracker->setMemoryPeak(peak_memory);
     }
     else
     {
@@ -363,8 +366,8 @@ void MPPTask::runImpl()
     else
         LOG_WARNING(log, "finish task which was cancelled before");
 
-    mpp_task_statistics.end(status.load(), err_msg);
-    mpp_task_statistics.logTracingJson();
+    mpp_tracker->end(status.load(), err_msg);
+    mpp_tracker->logTracingJson();
 }
 
 void MPPTask::writeErrToAllTunnels(const String & e)

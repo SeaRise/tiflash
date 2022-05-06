@@ -17,6 +17,7 @@
 #include <Flash/Statistics/CommonExecutorImpl.h>
 #include <Flash/Statistics/ExchangeReceiverImpl.h>
 #include <Flash/Statistics/ExchangeSenderImpl.h>
+#include <Flash/Statistics/ExecutorIdGenerator.h>
 #include <Flash/Statistics/ExecutorStatisticsCollector.h>
 #include <Flash/Statistics/JoinImpl.h>
 #include <Flash/Statistics/TableScanImpl.h>
@@ -50,9 +51,9 @@ void ExecutorStatisticsCollector::initialize(DAGContext * dag_context_)
     assert(dag_context_);
     dag_context = dag_context_;
     assert(dag_context->dag_request);
+    ExecutorIdGenerator exec_id_generator;
     traverseExecutors(dag_context->dag_request, [&](const tipb::Executor & executor) {
-        assert(executor.has_executor_id());
-        const auto & executor_id = executor.executor_id();
+        const auto & executor_id = exec_id_generator.generate(executor);
         if (!append<
                 AggStatistics,
                 ExchangeReceiverStatistics,

@@ -19,9 +19,13 @@
 #include <Flash/Mpp/MPPTaskId.h>
 #include <Interpreters/SubqueryForSet.h>
 
+#include <memory>
 
 namespace DB
 {
+class Tracker;
+using TrackerPtr = std::shared_ptr<Tracker>;
+
 /** Returns the data from the stream of blocks without changes, but
   * in the `readPrefix` function or before reading the first block
   * initializes all the passed sets.
@@ -79,6 +83,8 @@ public:
         }
     }
 
+    void assignTracker(const TrackerPtr & tracker_) { tracker = tracker_; }
+
 protected:
     Block readImpl() override;
     void readPrefixImpl() override;
@@ -98,6 +104,8 @@ private:
     std::vector<std::exception_ptr> exception_from_workers;
 
     const LoggerPtr log;
+
+    TrackerPtr tracker;
 
     void createAll();
     void createOne(SubqueryForSet & subquery);

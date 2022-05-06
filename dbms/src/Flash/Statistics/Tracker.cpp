@@ -15,36 +15,48 @@
 #include <Common/FmtUtils.h>
 #include <DataStreams/TiRemoteBlockInputStream.h>
 #include <Flash/Coprocessor/DAGContext.h>
-#include <Flash/Mpp/MPPTaskStatistics.h>
-#include <Flash/Mpp/getMPPTaskTracingLog.h>
+#include <Flash/Statistics/Tracker.h>
+#include <Flash/Statistics/getTracingLog.h>
 #include <common/logger_useful.h>
 #include <fmt/format.h>
 #include <tipb/executor.pb.h>
 
 namespace DB
 {
-MPPTaskStatistics::MPPTaskStatistics(const MPPTaskId & id_, String address_)
-    : logger(getMPPTaskTracingLog(id_))
+namespace
+{
+Int64 toNanoseconds(MPPTracker::Timestamp timestamp)
+{
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(timestamp.time_since_epoch()).count();
+}
+} // namespace
+
+Tracker::Tracker(const String & req_id)
+    : logger(getTracingLog(req_id))
+{}
+
+MPPTracker::MPPTracker(const MPPTaskId & id_, String address_)
+    : Tracker(id_.toString())
     , id(id_)
     , host(std::move(address_))
     , task_init_timestamp(Clock::now())
     , status(INITIALIZING)
 {}
 
-void MPPTaskStatistics::start()
+void MPPTracker::start()
 {
     task_start_timestamp = Clock::now();
     status = RUNNING;
 }
 
-void MPPTaskStatistics::end(const TaskStatus & status_, StringRef error_message_)
+void MPPTracker::end(const TaskStatus & status_, StringRef error_message_)
 {
     task_end_timestamp = Clock::now();
     status = status_;
     error_message.assign(error_message_.data, error_message_.size);
 }
 
-void MPPTaskStatistics::recordReadWaitIndex(DAGContext & dag_context)
+void MPPTracker::recordReadWaitIndex(DAGContext & dag_context)
 {
     if (dag_context.has_read_wait_index)
     {
@@ -54,15 +66,7 @@ void MPPTaskStatistics::recordReadWaitIndex(DAGContext & dag_context)
     // else keep zero timestamp
 }
 
-namespace
-{
-Int64 toNanoseconds(MPPTaskStatistics::Timestamp timestamp)
-{
-    return std::chrono::duration_cast<std::chrono::nanoseconds>(timestamp.time_since_epoch()).count();
-}
-} // namespace
-
-void MPPTaskStatistics::initializeExecutorDAG(DAGContext * dag_context)
+void MPPTracker::initializeExecutorDAG(DAGContext * dag_context)
 {
     assert(dag_context);
     assert(dag_context->dag_request);
@@ -75,12 +79,12 @@ void MPPTaskStatistics::initializeExecutorDAG(DAGContext * dag_context)
     executor_statistics_collector.initialize(dag_context);
 }
 
-const BaseRuntimeStatistics & MPPTaskStatistics::collectRuntimeStatistics()
+const BaseRuntimeStatistics & MPPTracker::collectRuntimeStatistics()
 {
     executor_statistics_collector.collectRuntimeDetails();
     const auto & executor_statistics_res = executor_statistics_collector.getResult();
     auto it = executor_statistics_res.find(sender_executor_id);
-    if (it == executor_statistics_res.end())
+    if (unlikely(it == executor_statistics_res.end()))
     {
         throw TiFlashException(
             "Can't find exchange sender statistics after `collectRuntimeStatistics`",
@@ -95,7 +99,7 @@ const BaseRuntimeStatistics & MPPTaskStatistics::collectRuntimeStatistics()
     return return_statistics;
 }
 
-void MPPTaskStatistics::logTracingJson()
+void MPPTracker::logTracingJson() const
 {
     LOG_FMT_INFO(
         logger,
@@ -127,18 +131,18 @@ void MPPTaskStatistics::logTracingJson()
         memory_peak);
 }
 
-void MPPTaskStatistics::setMemoryPeak(Int64 memory_peak_)
+void MPPTracker::setMemoryPeak(Int64 memory_peak_)
 {
     memory_peak = memory_peak_;
 }
 
-void MPPTaskStatistics::setCompileTimestamp(const Timestamp & start_timestamp, const Timestamp & end_timestamp)
+void MPPTracker::setCompileTimestamp(const Timestamp & start_timestamp, const Timestamp & end_timestamp)
 {
     compile_start_timestamp = start_timestamp;
     compile_end_timestamp = end_timestamp;
 }
 
-void MPPTaskStatistics::recordInputBytes(DAGContext & dag_context)
+void MPPTracker::recordInputBytes(DAGContext & dag_context)
 {
     for (const auto & map_entry : dag_context.getInBoundIOInputStreamsMap())
     {

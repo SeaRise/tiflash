@@ -25,16 +25,37 @@
 
 #include <chrono>
 #include <map>
+#include <memory>
 
 namespace DB
 {
-class MPPTaskStatistics
+class Tracker
+{
+public:
+    explicit Tracker(const String & req_id);
+
+    virtual void logTracingJson() const = 0;
+
+    /// return root executor runtime statistics
+    virtual const BaseRuntimeStatistics & collectRuntimeStatistics() = 0;
+
+    virtual void initializeExecutorDAG(DAGContext * dag_context) = 0;
+
+    virtual ~Tracker() = default;
+
+protected:
+    const LoggerPtr logger;
+};
+
+using TrackerPtr = std::shared_ptr<Tracker>;
+
+class MPPTracker : public Tracker
 {
 public:
     using Clock = std::chrono::system_clock;
     using Timestamp = Clock::time_point;
 
-    MPPTaskStatistics(const MPPTaskId & id_, String address_);
+    MPPTracker(const MPPTaskId & id_, String address_);
 
     void start();
 
@@ -42,12 +63,12 @@ public:
 
     void recordReadWaitIndex(DAGContext & dag_context);
 
-    void initializeExecutorDAG(DAGContext * dag_context);
+    void initializeExecutorDAG(DAGContext * dag_context) override;
 
     /// return exchange sender runtime statistics
-    const BaseRuntimeStatistics & collectRuntimeStatistics();
+    const BaseRuntimeStatistics & collectRuntimeStatistics() override;
 
-    void logTracingJson();
+    void logTracingJson() const override;
 
     void setMemoryPeak(Int64 memory_peak);
 
@@ -84,4 +105,6 @@ private:
     Int64 working_time = 0;
     Int64 memory_peak = 0;
 };
+
+using MPPTrackerPtr = std::shared_ptr<MPPTracker>;
 } // namespace DB

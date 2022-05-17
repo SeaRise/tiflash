@@ -17,6 +17,7 @@
 #include <Interpreters/executeQuery.h>
 #include <TestUtils/InterpreterTestUtils.h>
 #include <TestUtils/executorSerializer.h>
+
 namespace DB::tests
 {
 DAGContext & InterpreterTest::getDAGContext()

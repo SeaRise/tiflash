@@ -14,31 +14,104 @@
 
 #pragma once
 
-#include <TestUtils/InterpreterTestUtils.h>
-#include <Poco/JSON/Parser.h>
+#include <common/types.h>
+#include <Poco/JSON/Object.h>
+#include <tipb/select.pb.h>
+#include <unordered_map>
+
+#include <memory>
+#include <vector>
 
 namespace DB::tests
 {
-class InterpretTestKit
+
+/**
+ *
+ * format of test.out
+ *
+ * [
+ *   {
+ *    "Name": "${cases_name}",
+ *     "Cases": [
+ *       {
+ *         "Result": [
+ *           "xx",
+ *           "yy"
+ *         ]
+ *       },
+ *       {
+ *         "Result": [
+ *           "xx",
+ *           "yy"
+ *         ]
+ *       }
+ *     ]
+ *   },
+ *   {
+ *     "Name": "${cases_name}",
+ *     "Cases": [
+ *       {
+ *         "Result": [
+ *           "xx",
+ *           "yy"
+ *         ]
+ *       },
+ *       {
+ *         "Result": [
+ *           "xx",
+ *           "yy"
+ *         ]
+ *       }
+ *     ]
+ *   }
+ * ]
+ */
+
+class Cases
 {
 public:
-    InterpretTestKit(
-        const String & test_case_name_,
-        size_t concurrency_)
-        : test_case_name(test_case_name_)
-        , concurrency(concurrency_)
-    {
+    explicit Cases(const Poco::JSON::Object::Ptr & obj);
 
+    explicit Cases(const String & name_);
+
+    bool hasNext() const
+    {
+        return index < outputs.size();
     }
 
-    void interpret(const std::shared_ptr<tipb::DAGRequest> & request)
+    const String & next()
     {
-
+        return outputs[index++];
     }
+
+    void pushBack(const String & output)
+    {
+        outputs.push_back(output);
+    }
+
+    const String & getName() const { return name; }
+
+    Poco::JSON::Object::Ptr toJson() const;
 
 private:
-    const String test_case_name;
-    const size_t concurrency;
-    size_t case_index;
+    String name;
+    std::vector<String> outputs;
+    size_t index = 0;
+};
+
+class TestCaseOut
+{
+public:
+    explicit TestCaseOut(const String & test_name_);
+
+    void assertWithCases(const String & cases_name, const String & expect_result);
+
+    Poco::JSON::Array::Ptr toJson() const;
+
+    ~TestCaseOut();
+
+private:
+     String test_name;
+     std::unordered_map<String, Cases> cases_map;
 };
 } // namespace DB::tests

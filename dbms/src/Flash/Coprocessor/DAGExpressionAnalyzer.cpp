@@ -1155,23 +1155,8 @@ NamesWithAliases DAGExpressionAnalyzer::appendFinalProjectForRootQueryBlock(
     const String & column_prefix,
     bool keep_session_timezone_info)
 {
-    if (unlikely(output_offsets.empty()))
-        throw Exception("Root Query block without output_offsets", ErrorCodes::LOGICAL_ERROR);
-
-    bool need_append_timezone_cast = !keep_session_timezone_info && !context.getTimezoneInfo().is_utc_timezone;
-    auto [need_append_type_cast, need_append_type_cast_vec] = isCastRequiredForRootFinalProjection(schema, output_offsets);
-    assert(need_append_type_cast_vec.size() == output_offsets.size());
-
     auto & step = initAndGetLastStep(chain);
-
-    if (need_append_timezone_cast || need_append_type_cast)
-    {
-        // after appendCastForRootFinalProjection, source_columns has been modified.
-        appendCastForRootFinalProjection(step.actions, schema, output_offsets, need_append_timezone_cast, need_append_type_cast_vec);
-    }
-
-    // generate project aliases from source_columns.
-    NamesWithAliases final_project = genRootFinalProjectAliases(column_prefix, output_offsets);
+    NamesWithAliases final_project = buildFinalProjection(step.actions, schema, output_offsets, column_prefix, keep_session_timezone_info);
 
     for (const auto & name : final_project)
     {

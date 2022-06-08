@@ -42,8 +42,9 @@ void executeUnion(
 
 void executeExpression(
     DAGPipeline & pipeline,
-    const ExpressionActionsPtr & expressionActionsPtr,
-    const LoggerPtr & log);
+    const ExpressionActionsPtr & expression_actions_ptr,
+    const LoggerPtr & log,
+    const String & extra_info = "");
 
 void updateFinalConcurrency(
     DAGContext & dag_context,

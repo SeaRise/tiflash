@@ -94,12 +94,16 @@ void executeUnion(
 
 void executeExpression(
     DAGPipeline & pipeline,
-    const ExpressionActionsPtr & expressionActionsPtr,
-    const LoggerPtr & log)
+    const ExpressionActionsPtr & expression_actions_ptr,
+    const LoggerPtr & log,
+    const String & extra_info)
 {
     if (!expressionActionsPtr->getActions().empty())
     {
-        pipeline.transform([&](auto & stream) { stream = std::make_shared<ExpressionBlockInputStream>(stream, expressionActionsPtr, log->identifier()); });
+        pipeline.transform([&](auto & stream) {
+            stream = std::make_shared<ExpressionBlockInputStream>(stream, expression_actions_ptr, log->identifier());
+            stream->setExtraInfo(extra_info);
+        });
     }
 }
 

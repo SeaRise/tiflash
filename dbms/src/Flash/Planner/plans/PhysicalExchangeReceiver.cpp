@@ -74,6 +74,7 @@ void PhysicalExchangeReceiver::transformImpl(DAGPipeline & pipeline, Context & c
         BlockInputStreamPtr stream = std::make_shared<ExchangeReceiverInputStream>(mpp_exchange_receiver, log->identifier(), executor_id);
         exchange_receiver_io_input_streams.push_back(stream);
         stream = std::make_shared<SquashingBlockInputStream>(stream, 8192, 0, log->identifier());
+        stream->setExtraInfo("squashing after exchange receiver");
         pipeline.streams.push_back(stream);
     }
 }

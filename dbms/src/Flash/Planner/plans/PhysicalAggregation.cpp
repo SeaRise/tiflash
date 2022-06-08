@@ -88,7 +88,7 @@ void PhysicalAggregation::transformImpl(DAGPipeline & pipeline, Context & contex
 {
     child->transform(pipeline, context, max_streams);
 
-    executeExpression(pipeline, before_agg_actions, log);
+    executeExpression(pipeline, before_agg_actions, log, "before aggregation");
 
     Block before_agg_header = pipeline.firstStream()->getHeader();
     AggregationInterpreterHelper::fillArgColumnNumbers(aggregate_descriptions, before_agg_header);

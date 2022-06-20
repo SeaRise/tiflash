@@ -40,7 +40,6 @@ PhysicalPlanPtr PhysicalProjection::build(
     NamesAndTypes schema;
     NamesWithAliases project_aliases;
     UniqueNameGenerator unique_name_generator;
-    bool should_add_project_alias = false;
     for (const auto & expr : projection.exprs())
     {
         auto expr_name = analyzer.getActions(expr, project_actions);
@@ -48,14 +47,13 @@ PhysicalPlanPtr PhysicalProjection::build(
 
         String alias = unique_name_generator.toUniqueName(col.name);
         project_aliases.emplace_back(col.name, alias);
-        should_add_project_alias |= (alias != col.name);
-
         schema.emplace_back(alias, col.type);
     }
-    if (should_add_project_alias)
-        project_actions->add(ExpressionAction::project(project_aliases));
+    /// TODO When there is no alias, there is no need to add the project action.
+    /// https://github.com/pingcap/tiflash/issues/3921
+    project_actions->add(ExpressionAction::project(project_aliases));
 
-    auto physical_projection = std::make_shared<PhysicalProjection>(executor_id, schema, req_id, project_actions);
+    auto physical_projection = std::make_shared<PhysicalProjection>(executor_id, schema, req_id, "projection", project_actions);
     physical_projection->appendChild(child);
     return physical_projection;
 }
@@ -82,7 +80,7 @@ PhysicalPlanPtr PhysicalProjection::buildNonRootFinal(
         schema[i].name = final_project_aliases[i].second;
     }
 
-    auto physical_projection = std::make_shared<PhysicalProjection>("NonRootFinalProjection", schema, req_id, project_actions);
+    auto physical_projection = std::make_shared<PhysicalProjection>("NonRootFinalProjection", schema, req_id, "final projection", project_actions);
     // For final projection, no need to record profile streams.
     physical_projection->disableRecordProfileStreams();
     physical_projection->appendChild(child);
@@ -122,7 +120,7 @@ PhysicalPlanPtr PhysicalProjection::buildRootFinal(
         schema.emplace_back(alias, type);
     }
 
-    auto physical_projection = std::make_shared<PhysicalProjection>("RootFinalProjection", schema, req_id, project_actions);
+    auto physical_projection = std::make_shared<PhysicalProjection>("RootFinalProjection", schema, req_id, "final projection", project_actions);
     // For final projection, no need to record profile streams.
     physical_projection->disableRecordProfileStreams();
     physical_projection->appendChild(child);
@@ -133,25 +131,18 @@ void PhysicalProjection::transformImpl(DAGPipeline & pipeline, Context & context
 {
     child->transform(pipeline, context, max_streams);
 
-    executeExpression(pipeline, project_actions, log, "projection");
+    executeExpression(pipeline, project_actions, log, extra_info);
 }
 
 void PhysicalProjection::finalize(const Names & parent_require)
 {
-    // Maybe parent_require.size() > schema.size() for non-final projection.
-    if (parent_require.size() > schema.size())
-        FinalizeHelper::checkParentRequireContainsSchema(parent_require, schema);
-    else
-        FinalizeHelper::checkSchemaContainsParentRequire(schema, parent_require);
+    FinalizeHelper::checkSchemaContainsParentRequire(schema, parent_require);
     project_actions->finalize(parent_require);
 
     child->finalize(project_actions->getRequiredColumns());
     FinalizeHelper::prependProjectInputIfNeed(project_actions, child->getSampleBlock().columns());
 
-    if (parent_require.size() > schema.size())
-        FinalizeHelper::checkSampleBlockContainsSchema(getSampleBlock(), schema);
-    else
-        FinalizeHelper::checkSchemaContainsSampleBlock(schema, getSampleBlock());
+    FinalizeHelper::checkSampleBlockContainsSchema(getSampleBlock(), schema);
 }
 
 const Block & PhysicalProjection::getSampleBlock() const

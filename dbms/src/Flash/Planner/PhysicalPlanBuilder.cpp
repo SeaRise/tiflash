@@ -13,7 +13,10 @@
 // limitations under the License.
 
 #include <Flash/Coprocessor/DAGContext.h>
+#include <Flash/Planner/ExecutorIdGenerator.h>
 #include <Flash/Planner/PhysicalPlanBuilder.h>
+#include <Flash/Planner/PhysicalPlanVisitor.h>
+#include <Flash/Planner/optimize.h>
 #include <Flash/Planner/plans/PhysicalAggregation.h>
 #include <Flash/Planner/plans/PhysicalExchangeReceiver.h>
 #include <Flash/Planner/plans/PhysicalExchangeSender.h>
@@ -31,11 +34,12 @@ namespace DB
 {
 void PhysicalPlanBuilder::build(const tipb::DAGRequest * dag_request)
 {
+    assert(dag_request);
+    ExecutorIdGenerator id_generator;
     traverseExecutorsReverse(
         dag_request,
         [&](const tipb::Executor & executor) {
-            assert(executor.has_executor_id());
-            build(executor.executor_id(), &executor);
+            build(id_generator.generate(executor), &executor);
             return true;
         });
 }
@@ -46,36 +50,36 @@ void PhysicalPlanBuilder::build(const String & executor_id, const tipb::Executor
     switch (executor->tp())
     {
     case tipb::ExecType::TypeLimit:
-        cur_plans.push_back(PhysicalLimit::build(executor_id, log->identifier(), executor->limit(), popBack()));
+        pushBack(PhysicalLimit::build(executor_id, log->identifier(), executor->limit(), popBack()));
         break;
     case tipb::ExecType::TypeTopN:
-        cur_plans.push_back(PhysicalTopN::build(context, executor_id, log->identifier(), executor->topn(), popBack()));
+        pushBack(PhysicalTopN::build(context, executor_id, log->identifier(), executor->topn(), popBack()));
         break;
     case tipb::ExecType::TypeSelection:
-        cur_plans.push_back(PhysicalFilter::build(context, executor_id, log->identifier(), executor->selection(), popBack()));
+        pushBack(PhysicalFilter::build(context, executor_id, log->identifier(), executor->selection(), popBack()));
         break;
     case tipb::ExecType::TypeAggregation:
     case tipb::ExecType::TypeStreamAgg:
-        cur_plans.push_back(PhysicalAggregation::build(context, executor_id, log->identifier(), executor->aggregation(), popBack()));
+        pushBack(PhysicalAggregation::build(context, executor_id, log->identifier(), executor->aggregation(), popBack()));
         break;
     case tipb::ExecType::TypeExchangeSender:
     {
         if (unlikely(dagContext().isTest()))
-            cur_plans.push_back(PhysicalMockExchangeSender::build(executor_id, log->identifier(), popBack()));
+            pushBack(PhysicalMockExchangeSender::build(executor_id, log->identifier(), popBack()));
         else
-            cur_plans.push_back(PhysicalExchangeSender::build(executor_id, log->identifier(), executor->exchange_sender(), popBack()));
+            pushBack(PhysicalExchangeSender::build(executor_id, log->identifier(), executor->exchange_sender(), popBack()));
         break;
     }
     case tipb::ExecType::TypeExchangeReceiver:
     {
         if (unlikely(dagContext().isTest()))
-            cur_plans.push_back(PhysicalMockExchangeReceiver::build(context, executor_id, log->identifier(), executor->exchange_receiver()));
+            pushBack(PhysicalMockExchangeReceiver::build(context, executor_id, log->identifier(), executor->exchange_receiver()));
         else
-            cur_plans.push_back(PhysicalExchangeReceiver::build(context, executor_id, log->identifier()));
+            pushBack(PhysicalExchangeReceiver::build(context, executor_id, log->identifier()));
         break;
     }
     case tipb::ExecType::TypeProjection:
-        cur_plans.push_back(PhysicalProjection::build(context, executor_id, log->identifier(), executor->projection(), popBack()));
+        pushBack(PhysicalProjection::build(context, executor_id, log->identifier(), executor->projection(), popBack()));
         break;
     default:
         throw TiFlashException(fmt::format("{} executor is not supported", executor->tp()), Errors::Planner::Unimplemented);
@@ -98,7 +102,7 @@ void PhysicalPlanBuilder::buildFinalProjection(const String & column_prefix, boo
             log->identifier(),
             column_prefix,
             popBack());
-    cur_plans.push_back(final_projection);
+    pushBack(final_projection);
 }
 
 DAGContext & PhysicalPlanBuilder::dagContext() const
@@ -106,16 +110,37 @@ DAGContext & PhysicalPlanBuilder::dagContext() const
     return *context.getDAGContext();
 }
 
+void PhysicalPlanBuilder::pushBack(const PhysicalPlanPtr & plan)
+{
+    assert(plan);
+    cur_plans.push_back(plan);
+}
+
 PhysicalPlanPtr PhysicalPlanBuilder::popBack()
 {
-    RUNTIME_ASSERT(!cur_plans.empty(), log, "cur_plans is empty, cannot popBack");
+    if (unlikely(cur_plans.empty()))
+        throw TiFlashException("cur_plans is empty, cannot popBack", Errors::Planner::Internal);
     PhysicalPlanPtr back = cur_plans.back();
     cur_plans.pop_back();
     return back;
 }
 
-void PhysicalPlanBuilder::buildSource(const Block & sample_block)
+void PhysicalPlanBuilder::buildSource(const BlockInputStreams & source_streams)
 {
-    cur_plans.push_back(PhysicalSource::build(sample_block, log->identifier()));
+    pushBack(PhysicalSource::build(source_streams, log->identifier()));
+}
+
+PhysicalPlanPtr PhysicalPlanBuilder::getResult() const
+{
+    RUNTIME_ASSERT(cur_plans.size() == 1, log, "There can only be one plan output, but here are {}", cur_plans.size());
+    PhysicalPlanPtr physical_plan = cur_plans.back();
+
+    LOG_FMT_DEBUG(
+        log,
+        "build unoptimized physical plan: \n{}",
+        PhysicalPlanVisitor::visitToString(physical_plan));
+
+    physical_plan = optimize(context, physical_plan);
+    return physical_plan;
 }
 } // namespace DB

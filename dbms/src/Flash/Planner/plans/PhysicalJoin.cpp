@@ -18,11 +18,11 @@
 #include <DataStreams/ExpressionBlockInputStream.h>
 #include <DataStreams/HashJoinBuildBlockInputStream.h>
 #include <DataStreams/HashJoinProbeBlockInputStream.h>
-#include <Flash/Coprocessor/JoinInterpreterHelper.h>
 #include <Flash/Coprocessor/DAGContext.h>
 #include <Flash/Coprocessor/DAGExpressionAnalyzer.h>
 #include <Flash/Coprocessor/DAGPipeline.h>
 #include <Flash/Coprocessor/InterpreterUtils.h>
+#include <Flash/Coprocessor/JoinInterpreterHelper.h>
 #include <Flash/Planner/FinalizeHelper.h>
 #include <Flash/Planner/PhysicalPlanHelper.h>
 #include <Flash/Planner/plans/PhysicalJoin.h>
@@ -51,12 +51,12 @@ void recordJoinExecuteInfo(
     assert(join_execute_info.join_ptr);
     dag_context.getJoinExecuteInfoMap()[executor_id] = std::move(join_execute_info);
 }
-}
+} // namespace
 
 PhysicalPlanPtr PhysicalJoin::build(
     const Context & context,
     const String & executor_id,
-    const String & req_id,
+    const LoggerPtr & log,
     const tipb::Join & join,
     PhysicalPlanPtr left,
     PhysicalPlanPtr right)
@@ -97,7 +97,7 @@ PhysicalPlanPtr PhysicalJoin::build(
         true,
         is_tiflash_right_join,
         tiflash_join.getProbeConditions());
-    RUNTIME_ASSERT(probe_side_prepare_actions, dag_context.log, "probe_side_prepare_actions cannot be nullptr");
+    RUNTIME_ASSERT(probe_side_prepare_actions, log, "probe_side_prepare_actions cannot be nullptr");
 
     // prepare build side
     auto [build_side_prepare_actions, build_key_names, build_filter_column_name] = JoinInterpreterHelper::prepareJoin(
@@ -108,7 +108,7 @@ PhysicalPlanPtr PhysicalJoin::build(
         false,
         is_tiflash_right_join,
         tiflash_join.getBuildConditions());
-    RUNTIME_ASSERT(build_side_prepare_actions, dag_context.log, "build_side_prepare_actions cannot be nullptr");
+    RUNTIME_ASSERT(build_side_prepare_actions, log, "build_side_prepare_actions cannot be nullptr");
 
     auto [other_condition_expr, other_filter_column_name, other_eq_filter_from_in_column_name]
         = tiflash_join.genJoinOtherConditionAction(context, left_input_header, right_input_header, probe_side_prepare_actions);
@@ -124,7 +124,7 @@ PhysicalPlanPtr PhysicalJoin::build(
         SizeLimits(settings.max_rows_in_join, settings.max_bytes_in_join, settings.join_overflow_mode),
         tiflash_join.kind,
         tiflash_join.strictness,
-        req_id,
+        log->identifier(),
         tiflash_join.join_key_collators,
         probe_filter_column_name,
         build_filter_column_name,
@@ -135,17 +135,18 @@ PhysicalPlanPtr PhysicalJoin::build(
         match_helper_name);
 
     recordJoinExecuteInfo(
-        dag_context, 
-        executor_id, 
-        tiflash_join.build_side_index == 0 ? left->execId() : right->execId(), 
+        dag_context,
+        executor_id,
+        tiflash_join.build_side_index == 0 ? left->execId() : right->execId(),
         join_ptr);
 
     auto physical_join = std::make_shared<PhysicalJoin>(
-        executor_id, 
-        join_output_schema, 
-        join_ptr, 
-        columns_added_by_join, 
-        build_side_prepare_actions, 
+        executor_id,
+        join_output_schema,
+        log->identifier(),
+        join_ptr,
+        columns_added_by_join,
+        build_side_prepare_actions,
         probe_side_prepare_actions,
         is_tiflash_right_join,
         PhysicalPlanHelper::constructBlockFromSchema(join_output_schema));

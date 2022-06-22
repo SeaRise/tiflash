@@ -28,8 +28,8 @@ class PhysicalBinary : public PhysicalPlan
 {
 public:
     PhysicalBinary(
-        const String & executor_id_, 
-        const PlanType & type_, 
+        const String & executor_id_,
+        const PlanType & type_,
         const NamesAndTypes & schema_,
         const String & req_id)
         : PhysicalPlan(executor_id_, type_, schema_, req_id)

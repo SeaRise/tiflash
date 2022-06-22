@@ -86,7 +86,7 @@ void PhysicalPlanBuilder::build(const String & executor_id, const tipb::Executor
     {
         auto right = popBack();
         auto left = popBack();
-        pushBack(PhysicalJoin::build(context, executor_id, log->identifier(), executor->join(), left, right));
+        pushBack(PhysicalJoin::build(context, executor_id, log, executor->join(), left, right));
         break;
     }
     default:

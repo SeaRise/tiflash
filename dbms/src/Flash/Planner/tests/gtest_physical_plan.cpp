@@ -36,6 +36,16 @@ public:
                                     {{"s1", TiDB::TP::TypeString}, {"s2", TiDB::TP::TypeString}},
                                     {toNullableVec<String>("s1", {"banana", {}, "banana"}),
                                      toNullableVec<String>("s2", {"apple", {}, "banana"})});
+
+        context.addExchangeReceiver("exchange_r_table",
+                                    {{"s1", TiDB::TP::TypeString}, {"join_c", TiDB::TP::TypeString}},
+                                    {toNullableVec<String>("s", {"banana", "banana"}),
+                                     toNullableVec<String>("join_c", {"apple", "banana"})});
+
+        context.addExchangeReceiver("exchange_l_table",
+                                    {{"s1", TiDB::TP::TypeString}, {"join_c", TiDB::TP::TypeString}},
+                                    {toNullableVec<String>("s", {"banana", "banana"}),
+                                     toNullableVec<String>("join_c", {"apple", "banana"})});
     }
 
     void execute(
@@ -226,6 +236,29 @@ Expression: <final projection>
  MockExchangeReceiver)",
         {toNullableVec<String>({"banana", {}, "banana"}),
          toNullableVec<String>({"apple", {}, "banana"})});
+}
+CATCH
+
+TEST_F(PhysicalPlanTestRunner, Join)
+try
+{
+    auto request = context
+                       .receive("exchange_l_table")
+                       .join(context.receive("exchange_r_table"), {col("join_c")}, ASTTableJoin::Kind::Left)
+                       .build(context);
+
+    execute(
+        request,
+        /*expected_physical_plan=*/R"(
+<Projection, RootFinalProjection> | is_record_profile_streams: false, schema: <physical_plan_s, Nullable(String)>, <physical_plan_join_c, Nullable(String)>, <physical_plan_s_1, Nullable(String)>, <physical_plan_join_c_1, Nullable(String)>
+ <Join, Join_2> | is_record_profile_streams: true, schema: <s, Nullable(String)>, <join_c, Nullable(String)>, <s, Nullable(String)>, <join_c, Nullable(String)>
+  <MockExchangeReceiver, exchange_receiver_1> | is_record_profile_streams: true, schema: <s, Nullable(String)>, <join_c, Nullable(String)>
+  <MockExchangeReceiver, exchange_receiver_0> | is_record_profile_streams: true, schema: <s, Nullable(String)>, <join_c, Nullable(String)>)",
+        /*expected_streams=*/R"()",
+        {toNullableVec<String>({"banana", "banana", "banana", "banana"}),
+         toNullableVec<String>({"apple", "apple", "banana", "banana"}),
+         toNullableVec<String>({"banana", "banana", "banana", "banana"}),
+         toNullableVec<String>({"apple", "banana", "apple", "banana"})});
 }
 CATCH
 

@@ -144,14 +144,14 @@ PhysicalPlanPtr PhysicalJoin::build(
         executor_id,
         join_output_schema,
         log->identifier(),
+        build_plan,
+        probe_plan,
         join_ptr,
         columns_added_by_join,
         build_side_prepare_actions,
         probe_side_prepare_actions,
         is_tiflash_right_join,
         PhysicalPlanHelper::constructBlockFromSchema(join_output_schema));
-    physical_join->appendChild(build_plan);
-    physical_join->appendChild(probe_plan);
     return physical_join;
 }
 

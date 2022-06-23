@@ -36,13 +36,15 @@ public:
         const String & executor_id_,
         const NamesAndTypes & schema_,
         const String & req_id,
+        const PhysicalPlanPtr & build_,
+        const PhysicalPlanPtr & probe_,
         const JoinPtr & join_ptr_,
         const NamesAndTypesList & columns_added_by_join_,
         const ExpressionActionsPtr & probe_side_prepare_actions_,
         const ExpressionActionsPtr & build_side_prepare_actions_,
         bool has_non_joined_,
         const Block & sample_block_)
-        : PhysicalBinary(executor_id_, PlanType::Join, schema_, req_id)
+        : PhysicalBinary(executor_id_, PlanType::Join, schema_, req_id, build_, probe_)
         , join_ptr(join_ptr_)
         , columns_added_by_join(columns_added_by_join_)
         , probe_side_prepare_actions(probe_side_prepare_actions_)

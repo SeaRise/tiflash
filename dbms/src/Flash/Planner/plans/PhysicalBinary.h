@@ -31,8 +31,12 @@ public:
         const String & executor_id_,
         const PlanType & type_,
         const NamesAndTypes & schema_,
-        const String & req_id)
+        const String & req_id,
+        const PhysicalPlanPtr & left_,
+        const PhysicalPlanPtr & right_)
         : PhysicalPlan(executor_id_, type_, schema_, req_id)
+        , left(left_)
+        , right(right_)
     {}
 
     PhysicalPlanPtr children(size_t i) const override
@@ -49,22 +53,6 @@ public:
         assert(new_child.get() != this);
         auto & child = i == 0 ? left : right;
         child = new_child;
-    }
-
-    void appendChild(const PhysicalPlanPtr & new_child) override
-    {
-        assert(new_child);
-        assert(new_child.get() != this);
-        if (!left)
-        {
-            assert(!right);
-            left = new_child;
-        }
-        else
-        {
-            RUNTIME_ASSERT(!right, log, "the actual children size had be the max size({}), don't append child again", childrenSize());
-            right = new_child;
-        }
     }
 
     size_t childrenSize() const override { return 2; };

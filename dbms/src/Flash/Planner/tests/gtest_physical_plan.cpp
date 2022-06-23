@@ -235,7 +235,7 @@ try
 {
     auto request = context
                        .receive("exchange_l_table")
-                       .join(context.receive("exchange_r_table"), {col("join_c")}, ASTTableJoin::Kind::Left)
+                       .join(context.receive("exchange_r_table"), {col("join_c"), col("join_c")}, ASTTableJoin::Kind::Left)
                        .build(context);
 
     execute(

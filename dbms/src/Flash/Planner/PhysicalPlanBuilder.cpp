@@ -24,8 +24,10 @@
 #include <Flash/Planner/plans/PhysicalLimit.h>
 #include <Flash/Planner/plans/PhysicalMockExchangeReceiver.h>
 #include <Flash/Planner/plans/PhysicalMockExchangeSender.h>
+#include <Flash/Planner/plans/PhysicalMockTableScan.h>
 #include <Flash/Planner/plans/PhysicalProjection.h>
 #include <Flash/Planner/plans/PhysicalSource.h>
+#include <Flash/Planner/plans/PhysicalTableScan.h>
 #include <Flash/Planner/plans/PhysicalTopN.h>
 #include <Flash/Statistics/traverseExecutors.h>
 #include <Interpreters/Context.h>
@@ -81,6 +83,17 @@ void PhysicalPlanBuilder::build(const String & executor_id, const tipb::Executor
     case tipb::ExecType::TypeProjection:
         pushBack(PhysicalProjection::build(context, executor_id, log, executor->projection(), popBack()));
         break;
+    case tipb::ExecType::TypeTableScan:
+    case tipb::ExecType::TypePartitionTableScan:
+    {
+        TiDBTableScan table_scan(executor, executor_id, dagContext());
+        if (unlikely(dagContext().isTest()))
+            pushBack(PhysicalMockTableScan::build(context, executor_id, log, table_scan));
+        else
+            pushBack(PhysicalTableScan::build(context, executor_id, log, table_scan));
+        dagContext().table_scan_executor_id = executor_id;
+        break;
+    }
     default:
         throw TiFlashException(fmt::format("{} executor is not supported", executor->tp()), Errors::Planner::Unimplemented);
     }

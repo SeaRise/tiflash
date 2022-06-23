@@ -25,6 +25,8 @@ struct PushDownFilter
 {
     static PushDownFilter toPushDownFilter(const String & executor_id, const tipb::Executor * executor);
 
+    PushDownFilter() = default;
+
     PushDownFilter(
         const String & executor_id_,
         const std::vector<const tipb::Expr *> & conditions_);

@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <Flash/Coprocessor/ChunkCodec.h>
 #include <Flash/Coprocessor/DAGPipeline.h>
 #include <Flash/Coprocessor/DAGStorageInterpreter.h>
 #include <Flash/Coprocessor/GenSchemaAndColumn.h>
+#include <Flash/Coprocessor/InterpreterUtils.h>
 #include <Flash/Coprocessor/MockSourceStream.h>
 #include <Flash/Planner/FinalizeHelper.h>
 #include <Flash/Planner/PhysicalPlanHelper.h>
-#include <Flash/Coprocessor/InterpreterUtils.h>
 #include <Flash/Planner/plans/PhysicalTableScan.h>
-#include <Flash/Coprocessor/DAGPipeline.h>
 #include <Interpreters/Context.h>
 
 namespace DB
@@ -37,7 +37,6 @@ PhysicalTableScan::PhysicalTableScan(
 {}
 
 PhysicalPlanPtr PhysicalTableScan::build(
-    Context & context,
     const String & executor_id,
     const LoggerPtr & log,
     const TiDBTableScan & table_scan)
@@ -77,5 +76,17 @@ void PhysicalTableScan::finalize(const Names & parent_require)
 const Block & PhysicalTableScan::getSampleBlock() const
 {
     return sample_block;
+}
+
+void PhysicalTableScan::pushDownFilter(const String & filter_executor_id, const tipb::Selection & selection)
+{
+    if (unlikely(hasPushDownFilter()))
+        throw TiFlashException("PhysicalTableScan cannot push down more than one filter", Errors::Planner::Internal);
+    push_down_filter = PushDownFilter::toPushDownFilter(filter_executor_id, selection);
+}
+
+bool PhysicalTableScan::hasPushDownFilter() const
+{
+    return push_down_filter.hasValue();
 }
 } // namespace DB

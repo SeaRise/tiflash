@@ -30,8 +30,7 @@ void analyzePhysicalPlan(PhysicalPlanBuilder & builder, const DAGQueryBlock & qu
     assert(query_block.source);
     builder.build(query_block.source_name, query_block.source);
 
-    // selection on table scan had been executed in table scan.
-    if (query_block.selection && !query_block.isTableScanSource())
+    if (query_block.selection)
     {
         builder.build(query_block.selection_name, query_block.selection);
     }
@@ -89,7 +88,8 @@ bool Planner::isSupported(const DAGQueryBlock & query_block)
 {
     return query_block.source
         && (query_block.source->tp() == tipb::ExecType::TypeProjection
-            || query_block.source->tp() == tipb::ExecType::TypeExchangeReceiver);
+            || query_block.source->tp() == tipb::ExecType::TypeExchangeReceiver
+            || query_block.isTableScanSource());
 }
 
 DAGContext & Planner::dagContext() const

@@ -58,8 +58,21 @@ void PhysicalPlanBuilder::build(const String & executor_id, const tipb::Executor
         pushBack(PhysicalTopN::build(context, executor_id, log, executor->topn(), popBack()));
         break;
     case tipb::ExecType::TypeSelection:
-        pushBack(PhysicalFilter::build(context, executor_id, log, executor->selection(), popBack()));
+    {
+        auto child = popBack();
+        if (child->tp() == PlanType::TableScan)
+        {
+            auto physical_table_scan = std::static_pointer_cast<PhysicalTableScan>(child);
+            if (!physical_table_scan->hasPushDownFilter())
+            {
+                physical_table_scan->pushDownFilter(executor_id, executor->selection());
+                pushBack(physical_table_scan);
+                break;
+            }
+        }
+        pushBack(PhysicalFilter::build(context, executor_id, log, executor->selection(), child));
         break;
+    }
     case tipb::ExecType::TypeAggregation:
     case tipb::ExecType::TypeStreamAgg:
         pushBack(PhysicalAggregation::build(context, executor_id, log, executor->aggregation(), popBack()));
@@ -90,7 +103,7 @@ void PhysicalPlanBuilder::build(const String & executor_id, const tipb::Executor
         if (unlikely(dagContext().isTest()))
             pushBack(PhysicalMockTableScan::build(context, executor_id, log, table_scan));
         else
-            pushBack(PhysicalTableScan::build(context, executor_id, log, table_scan));
+            pushBack(PhysicalTableScan::build(executor_id, log, table_scan));
         dagContext().table_scan_executor_id = executor_id;
         break;
     }

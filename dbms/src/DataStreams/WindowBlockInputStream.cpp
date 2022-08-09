@@ -12,10 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <AggregateFunctions/AggregateFunctionFactory.h>
-#include <Common/Arena.h>
 #include <DataStreams/WindowBlockInputStream.h>
-#include <Interpreters/ExpressionActions.h>
 #include <Interpreters/WindowDescription.h>
 #include <Interpreters/convertFieldToType.h>
 

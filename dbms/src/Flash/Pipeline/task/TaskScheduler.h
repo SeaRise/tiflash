@@ -39,9 +39,10 @@ public:
     size_t concurrency() const;
 
 private:
-    // numa nodes<logical cpus>
-    std::vector<std::vector<EventLoopPtr>> numa_event_loops;
-    size_t total_event_loop_num = 0;
+    // start index of numa in event_loops
+    std::vector<size_t> numa_indexes;
+    size_t numa_num = 0;
+    std::vector<EventLoopPtr> event_loops;
 
     LoggerPtr log = Logger::get("TaskScheduler");
 };

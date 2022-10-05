@@ -74,6 +74,7 @@ TMTContext::TMTContext(Context & context_, const TiFlashRaftConfig & raft_config
     , schema_syncer(createSchemaSyncer(!raft_config.pd_addrs.empty(), raft_config.for_unit_test, cluster))
     , mpp_task_manager(std::make_shared<MPPTaskManager>(
           std::make_unique<MinTSOScheduler>(
+              context.getSettingsRef().enable_pipeline,
               context.getSettingsRef().task_scheduler_thread_soft_limit,
               context.getSettingsRef().task_scheduler_thread_hard_limit,
               context.getSettingsRef().task_scheduler_active_set_soft_limit),

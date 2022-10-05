@@ -21,8 +21,9 @@
 
 namespace DB
 {
-EventLoop::EventLoop(int core_, PipelineManager & pipeline_manager_)
-    : core(core_)
+EventLoop::EventLoop(size_t loop_id_, int core_, PipelineManager & pipeline_manager_)
+    : loop_id(loop_id_)
+    , core(core_)
     , pipeline_manager(pipeline_manager_)
 {
     // TODO 2 thread for per event loop.
@@ -99,11 +100,11 @@ void EventLoop::loop()
     CPU_ZERO(&cpu_set);
     CPU_SET(core, &cpu_set);
     int ret = sched_setaffinity(0, sizeof(cpu_set), &cpu_set);
-    if (ret != 0)
+    if (unlikely(ret != 0))
         throw Exception(fmt::format("sched_setaffinity fail: {}", std::strerror(errno)));
 #endif
-    setThreadName(fmt::format("event loop: {}", core).c_str());
-    LOG_INFO(logger, "start event loop with cpu core: {}", core);
+    setThreadName(fmt::format("el<{},{}>", loop_id, core).c_str());
+    LOG_INFO(logger, "start event loop {} with cpu core: {}", loop_id, core);
 
     PipelineTask task;
     while (likely(event_queue.pop(task) == MPMCQueueResult::OK))

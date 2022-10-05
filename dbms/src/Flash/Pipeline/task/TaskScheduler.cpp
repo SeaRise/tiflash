@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <Common/getNumberOfPhysicalCPUCores.h>
 #include <Flash/Coprocessor/DAGContext.h>
 #include <Flash/Pipeline/task/TaskScheduler.h>
 #include <Interpreters/Context.h>
@@ -27,80 +26,86 @@ TaskScheduler::TaskScheduler(PipelineManager & pipeline_manager, const ServerInf
     LOG_FMT_INFO(log, "numa_nodes {} => {}", numa_nodes.size(), numa_nodes);
     if (numa_nodes.size() == 1 && numa_nodes.back().empty())
     {
+        numa_indexes.emplace_back(0);
         int logical_cores = server_info.cpu_info.logical_cores;
         RUNTIME_ASSERT(logical_cores > 0);
-        std::vector<EventLoopPtr> event_loops;
         event_loops.reserve(logical_cores);
         for (int core = 0; core < logical_cores; ++core)
-            event_loops.emplace_back(std::make_unique<EventLoop>(core, pipeline_manager));
-        total_event_loop_num = event_loops.size();
-        numa_event_loops.emplace_back(std::move(event_loops));
+            event_loops.emplace_back(std::make_unique<EventLoop>(core, core, pipeline_manager));
+        numa_indexes.emplace_back(event_loops.size());
     }
     else
     {
-        total_event_loop_num = 0;
+        RUNTIME_ASSERT(!numa_nodes.empty());
+        numa_indexes.emplace_back(0);
+        size_t loop_id = 0;
         for (const auto & node : numa_nodes)
         {
             RUNTIME_ASSERT(!node.empty());
-            std::vector<EventLoopPtr> event_loops;
-            event_loops.reserve(node.size());
+            event_loops.reserve(event_loops.size() + node.size());
             for (auto core : node)
-                event_loops.emplace_back(std::make_unique<EventLoop>(core, pipeline_manager));
-            total_event_loop_num += event_loops.size();
-            numa_event_loops.emplace_back(std::move(event_loops));
+                event_loops.emplace_back(std::make_unique<EventLoop>(loop_id++, core, pipeline_manager));
+            numa_indexes.emplace_back(event_loops.size());
         }
     }
-    LOG_DEBUG(log, "init {} event loop success", total_event_loop_num);
+    numa_num = numa_indexes.size() - 1;
+    LOG_DEBUG(log, "init {} event loop success", event_loops.size());
 }
 
 TaskScheduler::~TaskScheduler()
 {
-    for (const auto & event_loops : numa_event_loops)
-    {
-        for (const auto & event_loop : event_loops)
-            event_loop->finish();
-    }
-    numa_event_loops.clear();
+    for (const auto & event_loop : event_loops)
+        event_loop->finish();
+    event_loops.clear();
 }
 
 void TaskScheduler::submit(std::vector<PipelineTask> & tasks)
 {
     if (unlikely(tasks.empty()))
         return;
-    auto mpp_task_id = tasks.back().mpp_task_id;
+    auto tso = tasks.back().mpp_task_id.start_ts;
+    auto pipeline_id = tasks.back().pipeline_id;
 
     size_t i = 0;
-    while ((tasks.size() - i) >= total_event_loop_num)
+    while ((tasks.size() - i) >= event_loops.size())
     {
-        for (const auto & event_loops : numa_event_loops)
-        {
-            for (const auto & event_loop : event_loops)
-                event_loop->submit(std::move(tasks[i++]));
-        }
+        for (const auto & event_loop : event_loops)
+            event_loop->submit(std::move(tasks[i++]));
     }
 
+    static size_t numa_id_counter = tso % numa_num;
+    assert(numa_id_counter < numa_num);
     auto next_numa_id = [&]() {
-        static size_t j = mpp_task_id.start_ts % numa_event_loops.size();
-        size_t numa_id = j++;
-        j %= numa_event_loops.size();
+        size_t numa_id = numa_id_counter++;
+        assert(numa_id < numa_indexes.size());
+        if (numa_id_counter == numa_num)
+            numa_id_counter = 0;
         return numa_id;
     };
     while (i < tasks.size())
     {
         auto numa_id = next_numa_id();
-        auto & numa = numa_event_loops[numa_id];
-
-        if ((tasks.size() - i) >= numa.size())
+        auto numa_index = numa_indexes[numa_id];
+        auto numa_end = numa_indexes[numa_id + 1];
+        size_t numa_core_num = numa_end - numa_index;
+        assert(numa_core_num > 0);
+        if ((tasks.size() - i) >= numa_core_num)
         {
-            for (const auto & event_loop : numa)
-                event_loop->submit(std::move(tasks[i++]));
+            while (numa_index < numa_end)
+            {
+                assert(numa_index < event_loops.size());
+                event_loops[numa_index++]->submit(std::move(tasks[i++]));
+            }
         }
         else
         {
+            size_t loop_index = numa_index + ((pipeline_id + tso) % numa_core_num);
+            assert(loop_index < numa_end);
             auto next_loop = [&]() -> EventLoop & {
-                static size_t k = mpp_task_id.task_id % numa.size();
-                EventLoop & loop = *numa[k++];
-                k %= numa.size();
+                assert(loop_index < numa_end);
+                EventLoop & loop = *event_loops[loop_index++];
+                if (loop_index == numa_end)
+                    loop_index = numa_index;
                 return loop;
             };
             while (i < tasks.size())
@@ -111,6 +116,6 @@ void TaskScheduler::submit(std::vector<PipelineTask> & tasks)
 
 size_t TaskScheduler::concurrency() const
 {
-    return total_event_loop_num;
+    return event_loops.size();
 }
 } // namespace DB

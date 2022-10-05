@@ -28,9 +28,7 @@ struct PipelineManager;
 class EventLoop
 {
 public:
-    EventLoop(int core_, PipelineManager & pipeline_manager_);
-
-    void loop();
+    EventLoop(size_t loop_id_, int core_, PipelineManager & pipeline_manager_);
 
     void finish();
 
@@ -39,14 +37,17 @@ public:
     ~EventLoop();
 
 private:
+    void loop();
+
     void handleTask(PipelineTask & task);
 
 private:
+    size_t loop_id;
     int core;
     MPMCQueue<PipelineTask> event_queue{499999};
 
     PipelineManager & pipeline_manager;
-    LoggerPtr logger = Logger::get(fmt::format("event loop with cpu_core {}", core));
+    LoggerPtr logger = Logger::get(fmt::format("event loop {} with cpu_core {}", loop_id, core));
     std::thread t;
 };
 

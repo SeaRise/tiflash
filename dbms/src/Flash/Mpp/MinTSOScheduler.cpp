@@ -27,8 +27,9 @@ extern const char random_min_tso_scheduler_failpoint[];
 constexpr UInt64 MAX_UINT64 = std::numeric_limits<UInt64>::max();
 constexpr UInt64 OS_THREAD_SOFT_LIMIT = 100000;
 
-MinTSOScheduler::MinTSOScheduler(UInt64 soft_limit, UInt64 hard_limit, UInt64 active_set_soft_limit_)
+MinTSOScheduler::MinTSOScheduler(bool disable_, UInt64 soft_limit, UInt64 hard_limit, UInt64 active_set_soft_limit_)
     : min_tso(MAX_UINT64)
+    , disable(disable_)
     , thread_soft_limit(soft_limit)
     , thread_hard_limit(hard_limit)
     , estimated_thread_usage(0)

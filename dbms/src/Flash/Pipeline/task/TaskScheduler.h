@@ -17,6 +17,7 @@
 #include <Common/Logger.h>
 #include <Flash/Mpp/MPPTaskId.h>
 #include <Flash/Pipeline/task/EventLoop.h>
+#include <Flash/Pipeline/task/IOReactor.h>
 #include <Server/ServerInfo.h>
 
 #include <functional>
@@ -34,6 +35,8 @@ public:
 
     void submit(std::vector<PipelineTask> & tasks);
 
+    void submit(size_t loop_id, PipelineTask & task);
+
     void cancel(UInt32 pipeline_id);
 
     size_t concurrency() const;
@@ -43,6 +46,7 @@ private:
     std::vector<size_t> numa_indexes;
     size_t numa_num = 0;
     std::vector<EventLoopPtr> event_loops;
+    IOReactorPtr io_reactor;
 
     LoggerPtr log = Logger::get("TaskScheduler");
 };

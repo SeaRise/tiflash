@@ -23,39 +23,31 @@
 
 namespace DB
 {
-struct PipelineManager;
-class IOReactor;
+class TaskScheduler;
 
-class EventLoop
+class IOReactor
 {
 public:
-    EventLoop(
-        size_t loop_id_, 
-        int core_, 
-        PipelineManager & pipeline_manager_, 
-        IOReactor & io_reactor_);
+    explicit IOReactor(TaskScheduler & task_scheduler_);
 
     void finish();
 
-    void submit(PipelineTask & task);
+    void submit(size_t loop_id, PipelineTask & task);
 
-    ~EventLoop();
+    ~IOReactor();
 
 private:
     void loop();
 
-    void handleTask(PipelineTask & task);
+    void handleTask(std::pair<size_t, PipelineTask> & task);
 
 private:
-    size_t loop_id;
-    int core;
-    MPMCQueue<PipelineTask> event_queue{499999};
+    MPMCQueue<std::pair<size_t, PipelineTask>> event_queue{499999};
 
-    PipelineManager & pipeline_manager;
-    IOReactor & io_reactor;
-    LoggerPtr logger = Logger::get(fmt::format("event loop {} with cpu_core {}", loop_id, core));
+    TaskScheduler & task_scheduler;
+    LoggerPtr logger = Logger::get("IOReactor");
     std::thread t;
 };
 
-using EventLoopPtr = std::unique_ptr<EventLoop>;
+using IOReactorPtr = std::unique_ptr<IOReactor>;
 } // namespace DB

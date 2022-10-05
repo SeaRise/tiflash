@@ -17,20 +17,26 @@
 #include <Flash/Pipeline/dag/DAGScheduler.h>
 #include <Flash/Pipeline/dag/Event.h>
 #include <Flash/Pipeline/task/EventLoop.h>
+#include <Flash/Pipeline/task/IOReactor.h>
 #include <errno.h>
 
 namespace DB
 {
-EventLoop::EventLoop(size_t loop_id_, int core_, PipelineManager & pipeline_manager_)
+EventLoop::EventLoop(
+    size_t loop_id_, 
+    int core_, 
+    PipelineManager & pipeline_manager_, 
+    IOReactor & io_reactor_)
     : loop_id(loop_id_)
     , core(core_)
     , pipeline_manager(pipeline_manager_)
+    , io_reactor(io_reactor_)
 {
     // TODO 2 thread for per event loop.
     t = std::thread(&EventLoop::loop, this);
 }
 
-void EventLoop::submit(PipelineTask && task)
+void EventLoop::submit(PipelineTask & task)
 {
     RUNTIME_ASSERT(
         event_queue.tryPush(std::move(task)) != MPMCQueueResult::FULL,
@@ -64,6 +70,7 @@ void EventLoop::handleTask(PipelineTask & task)
         RUNTIME_ASSERT(
             event_queue.tryPush(std::move(task)) != MPMCQueueResult::FULL,
             "EventLoop event queue full");
+        io_reactor.submit(loop_id, task);
         break;
     }
     case PipelineTaskResultType::finished:

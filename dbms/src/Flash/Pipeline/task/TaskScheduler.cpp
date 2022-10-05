@@ -22,6 +22,7 @@ namespace DB
 {
 TaskScheduler::TaskScheduler(PipelineManager & pipeline_manager, const ServerInfo & server_info)
 {
+    io_reactor = std::make_unique<IOReactor>(*this);
     auto numa_nodes = DM::getNumaNodes(log->getLog());
     LOG_FMT_INFO(log, "numa_nodes {} => {}", numa_nodes.size(), numa_nodes);
     if (numa_nodes.size() == 1 && numa_nodes.back().empty())
@@ -31,7 +32,7 @@ TaskScheduler::TaskScheduler(PipelineManager & pipeline_manager, const ServerInf
         RUNTIME_ASSERT(logical_cores > 0);
         event_loops.reserve(logical_cores);
         for (int core = 0; core < logical_cores; ++core)
-            event_loops.emplace_back(std::make_unique<EventLoop>(core, core, pipeline_manager));
+            event_loops.emplace_back(std::make_unique<EventLoop>(core, core, pipeline_manager, *io_reactor));
         numa_indexes.emplace_back(event_loops.size());
     }
     else
@@ -44,7 +45,7 @@ TaskScheduler::TaskScheduler(PipelineManager & pipeline_manager, const ServerInf
             RUNTIME_ASSERT(!node.empty());
             event_loops.reserve(event_loops.size() + node.size());
             for (auto core : node)
-                event_loops.emplace_back(std::make_unique<EventLoop>(loop_id++, core, pipeline_manager));
+                event_loops.emplace_back(std::make_unique<EventLoop>(loop_id++, core, pipeline_manager, *io_reactor));
             numa_indexes.emplace_back(event_loops.size());
         }
     }
@@ -54,9 +55,17 @@ TaskScheduler::TaskScheduler(PipelineManager & pipeline_manager, const ServerInf
 
 TaskScheduler::~TaskScheduler()
 {
+    io_reactor->finish();
     for (const auto & event_loop : event_loops)
         event_loop->finish();
     event_loops.clear();
+    io_reactor = nullptr;
+}
+
+void TaskScheduler::submit(size_t loop_id, PipelineTask & task)
+{
+    assert(loop_id < event_loops.size());
+    event_loops[loop_id]->submit(std::move(task));
 }
 
 void TaskScheduler::submit(std::vector<PipelineTask> & tasks)

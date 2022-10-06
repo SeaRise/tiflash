@@ -39,9 +39,7 @@ public:
     size_t concurrency() const;
 
 private:
-    std::vector<EventLoopPoolPtr> event_loop_pools;
-
-    size_t loop_count = 0;
+    EventLoopPoolPtr event_loop_pool;
 
     LoggerPtr log = Logger::get("TaskScheduler");
 };

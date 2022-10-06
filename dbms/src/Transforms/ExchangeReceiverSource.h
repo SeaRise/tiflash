@@ -60,7 +60,7 @@ public:
     bool isIOReady() override
     {
         std::lock_guard lock(mutex);
-        if (done || !block_queue.empty() || !error_msg.empty())
+        if (done || recv_msg || !block_queue.empty() || !error_msg.empty())
             return true;
         auto fetch_result = fetchRemoteResult();
         switch (fetch_result)

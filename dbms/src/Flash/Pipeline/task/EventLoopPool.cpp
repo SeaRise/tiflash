@@ -22,29 +22,25 @@
 namespace DB
 {
 EventLoopPool::EventLoopPool(
-    size_t loop_id_,
-    size_t cpu_thread_count,
-    const std::vector<int> & cpus_,
+    size_t loop_num,
     PipelineManager & pipeline_manager_)
-    : loop_id(loop_id_)
-    , cpus(cpus_)
-    , pipeline_manager(pipeline_manager_)
+    : pipeline_manager(pipeline_manager_)
 {
-    cpu_threads.reserve(cpu_thread_count);
-    for (size_t i = 0; i < cpu_thread_count; ++i)
+    cpu_threads.reserve(loop_num);
+    for (size_t i = 0; i < loop_num; ++i)
         cpu_threads.emplace_back(std::thread(&EventLoopPool::cpuModeLoop, this));
     io_thread = std::thread(&EventLoopPool::ioModeLoop, this);
 }
 
 void EventLoopPool::submit(std::vector<PipelineTask> & tasks)
 {
-    for (size_t i = 0; i < cpu_threads.size(); ++i)
+    for (auto & task : tasks)
     {
-        if (!tasks.empty())
-        {
-            submitCPU(std::move(tasks.back()));
-            tasks.pop_back();
-        }
+        task.prepare();
+        if (task.tryToIOMode())
+            submitIO(std::move(task));
+        else
+            submitCPU(std::move(task));
     }
 }
 
@@ -73,7 +69,7 @@ EventLoopPool::~EventLoopPool()
     for (auto & cpu_thread : cpu_threads)
         cpu_thread.join();
     io_thread.join();
-    LOG_INFO(logger, "stop event loop pool {}", loop_id);
+    LOG_INFO(logger, "stop event loop pool");
 }
 
 void EventLoopPool::handleFinishTask(const PipelineTask & task)
@@ -151,8 +147,7 @@ void EventLoopPool::handleIOModeTask(PipelineTask && task)
 
 void EventLoopPool::cpuModeLoop()
 {
-    setCPUAffinity();
-    setThreadName(fmt::format("loop_{}", loop_id).c_str());
+    setThreadName("EventLoopPool");
     PipelineTask task;
     while (likely(cpu_event_queue.pop(task) == MPMCQueueResult::OK))
     {
@@ -162,38 +157,11 @@ void EventLoopPool::cpuModeLoop()
 
 void EventLoopPool::ioModeLoop()
 {
-    setCPUAffinity();
-    setThreadName(fmt::format("loop_{}", loop_id).c_str());
+    setThreadName("EventLoopPool");
     PipelineTask task;
     while (likely(io_event_queue.pop(task) == MPMCQueueResult::OK))
     {
         handleIOModeTask(std::move(task));
     }
-}
-
-void EventLoopPool::setCPUAffinity()
-{
-    if (cpus.empty())
-    {
-        return;
-    }
-#ifdef __linux__
-    cpu_set_t cpu_set;
-    CPU_ZERO(&cpu_set);
-    for (int i : cpus)
-    {
-        CPU_SET(i, &cpu_set);
-    }
-    int ret = sched_setaffinity(0, sizeof(cpu_set), &cpu_set);
-    if (ret != 0)
-    {
-        // It can be failed due to some CPU core cannot access, such as CPU offline.
-        LOG_WARNING(logger, "sched_setaffinity fail, cpus={} errno={}", cpus, std::strerror(errno));
-    }
-    else
-    {
-        LOG_FMT_DEBUG(logger, "sched_setaffinity succ, cpus={}", cpus);
-    }
-#endif
 }
 } // namespace DB

@@ -29,14 +29,14 @@ class EventLoopPool
 {
 public:
     EventLoopPool(
-        size_t loop_id_,
-        size_t cpu_thread_count,
-        const std::vector<int> & cpus_,
+        size_t loop_num,
         PipelineManager & pipeline_manager_);
 
     void finish();
 
     void submit(std::vector<PipelineTask> & tasks);
+
+    size_t concurrency() const { return cpu_threads.size(); }
 
     ~EventLoopPool();
 
@@ -52,15 +52,11 @@ private:
 
     void handleFinishTask(const PipelineTask & task);
     void handleErrTask(const PipelineTask & task, const PipelineTaskResult & result);
-
-    void setCPUAffinity();
-
 private:
     size_t loop_id;
-    std::vector<int> cpus;
     PipelineManager & pipeline_manager;
-    MPMCQueue<PipelineTask> cpu_event_queue{499999};
-    MPMCQueue<PipelineTask> io_event_queue{499999};
+    MPMCQueue<PipelineTask> cpu_event_queue{199999};
+    MPMCQueue<PipelineTask> io_event_queue{199999};
     std::vector<std::thread> cpu_threads;
     std::thread io_thread;
 

@@ -23,9 +23,11 @@ String PipelineTask::toString() const
     return fmt::format("{{task_id: {}, pipeline_id: {}, mpp_task_id: {}}}", task_id, pipeline_id, mpp_task_id.toString());
 }
 
+// must in io mode.
 bool PipelineTask::tryToCpuMode()
 {
     MemoryTrackerSetter setter(true, getMemTracker());
+    assert(status == PipelineTaskStatus::io_wait || status == PipelineTaskStatus::io_finish);
     if (transforms->isIOReady())
     {
         status = PipelineTaskStatus::cpu_run;
@@ -33,40 +35,43 @@ bool PipelineTask::tryToCpuMode()
     }
     return false;
 }
+// must call in submit
+bool PipelineTask::tryToIOMode()
+{
+    MemoryTrackerSetter setter(true, getMemTracker());
+    assert(status == PipelineTaskStatus::cpu_run);
+    if (!transforms->isIOReady())
+    {
+        status = PipelineTaskStatus::io_wait;
+        return true;
+    }
+    return false;
+}
 
+void PipelineTask::prepare()
+{
+    transforms->prepare();
+}
+
+// must in cpu mode.
 PipelineTaskResult PipelineTask::execute()
 {
     try
     {
         MemoryTrackerSetter setter(true, getMemTracker());
-        switch (status)
-        {
-        case PipelineTaskStatus::cpu_run:
-        {
-            if (!transforms->isIOReady())
-            {
-                status = PipelineTaskStatus::io_wait;
-                return running();
-            }
-            if (unlikely(!transforms->execute()))
-                status = PipelineTaskStatus::finish;
-            return running();
-        }
-        case PipelineTaskStatus::prepare:
-        {
-            transforms->prepare();
-            status = PipelineTaskStatus::cpu_run;
-            return running();
-        }
-        case PipelineTaskStatus::finish:
+        assert(status == PipelineTaskStatus::cpu_run);
+        if (unlikely(!transforms->execute()))
         {
             transforms->finish();
             if (!transforms->isIOReady())
                 status = PipelineTaskStatus::io_finish;
             return finish();
         }
-        default:
-            return fail("unknown status");
+        else
+        {
+            if (!transforms->isIOReady())
+                status = PipelineTaskStatus::io_wait;
+            return running();
         }
     }
     catch (...)

@@ -37,6 +37,7 @@ public:
         , physical_table_id(physical_table_id)
         , log(Logger::get("UnorderSource", req_id))
         , ref_no(0)
+        , task_pool_added(false)
     {
         if (extra_table_id_index != InvalidColumnID)
         {
@@ -78,6 +79,7 @@ public:
         std::lock_guard lock(mutex);
         if (done || io_block)
             return true;
+        addReadTaskPoolToScheduler();
         while (true)
         {
             Block res;
@@ -108,15 +110,15 @@ public:
         return header;
     }
 
-    void prepare() override
-    {
-        addReadTaskPoolToScheduler();
-    }
-
 private:
     void addReadTaskPoolToScheduler()
     {
+        if (likely(task_pool_added))
+        {
+            return;
+        }
         std::call_once(task_pool->addToSchedulerFlag(), [&]() { DM::SegmentReadTaskScheduler::instance().add(task_pool); });
+        task_pool_added = true;
     }
 
 private:
@@ -129,6 +131,7 @@ private:
     TableID physical_table_id;
     LoggerPtr log;
     int64_t ref_no;
+    bool task_pool_added;
 
     std::mutex mutex;
 };

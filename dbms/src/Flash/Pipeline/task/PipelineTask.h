@@ -23,9 +23,7 @@ namespace DB
 enum class PipelineTaskStatus
 {
     // cpu mode
-    prepare,
     cpu_run,
-    finish,
     // io mode
     io_wait,
     io_finish,
@@ -84,6 +82,8 @@ public:
         return *this;
     }
 
+    void prepare();
+
     PipelineTaskResult execute();
 
     MemoryTracker * getMemTracker()
@@ -92,6 +92,7 @@ public:
     }
 
     bool tryToCpuMode();
+    bool tryToIOMode();
 
     String toString() const;
 
@@ -101,7 +102,7 @@ public:
     MPPTaskId mpp_task_id;
     TransformsPtr transforms;
 
-    PipelineTaskStatus status = PipelineTaskStatus::prepare;
+    PipelineTaskStatus status = PipelineTaskStatus::cpu_run;
 
     std::shared_ptr<MemoryTracker> mem_tracker;
 

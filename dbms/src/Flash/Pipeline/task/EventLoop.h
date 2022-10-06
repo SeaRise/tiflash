@@ -20,11 +20,11 @@
 
 #include <memory>
 #include <thread>
+#include <queue>
 
 namespace DB
 {
 struct PipelineManager;
-class IOReactor;
 
 class EventLoop
 {
@@ -32,27 +32,31 @@ public:
     EventLoop(
         size_t loop_id_, 
         int core_, 
-        PipelineManager & pipeline_manager_, 
-        IOReactor & io_reactor_);
+        PipelineManager & pipeline_manager_);
 
     void finish();
 
-    void submit(PipelineTask & task);
+    void submit(PipelineTask && task);
 
     ~EventLoop();
 
 private:
     void loop();
 
-    void handleTask(PipelineTask & task);
+    void handleCpuModeTask(PipelineTask && task);
+    void handleIOModeTask(PipelineTask && task);
+
+    bool cpuModeLoop(PipelineTask & task);
+
+    bool cpuAndIOModeLoop(PipelineTask & task);
 
 private:
     size_t loop_id;
     int core;
     MPMCQueue<PipelineTask> event_queue{499999};
+    std::queue<PipelineTask> io_wait_queue;
 
     PipelineManager & pipeline_manager;
-    IOReactor & io_reactor;
     LoggerPtr logger = Logger::get(fmt::format("event loop {} with cpu_core {}", loop_id, core));
     std::thread t;
 };

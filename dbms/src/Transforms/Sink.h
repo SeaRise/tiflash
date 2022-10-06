@@ -26,7 +26,7 @@ public:
     virtual ~Sink() = default;
     virtual bool write(Block & block) = 0;
     virtual bool finish() { return true; }
-    virtual bool isReady() { return true; }
+    virtual bool isIOReady() { return true; }
 };
 
 using SinkPtr = std::shared_ptr<Sink>;

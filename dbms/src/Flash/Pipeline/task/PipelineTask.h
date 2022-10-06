@@ -22,9 +22,12 @@ namespace DB
 {
 enum class PipelineTaskStatus
 {
+    // cpu mode
     prepare,
-    running,
+    cpu_run,
     finish,
+    // io mode
+    io_wait,
 };
 
 enum class PipelineTaskResultType
@@ -87,6 +90,9 @@ public:
         return mem_tracker ? mem_tracker.get() : nullptr;
     }
 
+    bool tryToCpuMode();
+    bool tryToIOMode();
+
     String toString() const;
 
 public:
@@ -100,8 +106,8 @@ public:
     std::shared_ptr<MemoryTracker> mem_tracker;
 
 private:
-    PipelineTaskResult finish();
-    PipelineTaskResult fail(const String & err_msg);
-    PipelineTaskResult running();
+    static PipelineTaskResult finish();
+    static PipelineTaskResult fail(const String & err_msg);
+    static PipelineTaskResult running();
 };
 } // namespace DB

@@ -30,6 +30,7 @@ public:
     virtual void cancel(bool /*kill*/) {}
     virtual void prepare() {}
     virtual void finish() {}
+    virtual bool isIOReady() { return true; };
 };
 
 using SourcePtr = std::shared_ptr<Source>;

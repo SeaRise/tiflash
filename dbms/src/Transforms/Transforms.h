@@ -59,6 +59,8 @@ public:
 
     void addTableLock(const TableLockHolder & lock);
 
+    bool isIOReady();
+
 private:
     TableLockHolders table_locks;
 

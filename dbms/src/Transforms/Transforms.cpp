@@ -47,9 +47,6 @@ bool Transforms::execute()
     if (unlikely(isCancelledOrThrowIfKilled()))
         return false;
 
-    if (!sink->isReady())
-        return true;
-
     auto [is_ready, block] = source->read();
     if (!is_ready)
         return true;
@@ -87,6 +84,11 @@ void Transforms::cancel(bool kill)
     is_cancelled = true;
     assert(source);
     source->cancel(kill);
+}
+
+bool Transforms::isIOReady()
+{
+    return sink->isIOReady() && source->isIOReady();
 }
 
 bool Transforms::isCancelledOrThrowIfKilled() const

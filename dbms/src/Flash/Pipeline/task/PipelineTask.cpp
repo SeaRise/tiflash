@@ -23,6 +23,26 @@ String PipelineTask::toString() const
     return fmt::format("{{task_id: {}, pipeline_id: {}, mpp_task_id: {}}}", task_id, pipeline_id, mpp_task_id.toString());
 }
 
+bool PipelineTask::tryToCpuMode()
+{
+    if (transforms->isIOReady())
+    {
+        status = PipelineTaskStatus::cpu_run;
+        return true;
+    }
+    return false;
+}
+
+bool PipelineTask::tryToIOMode()
+{
+    if (!transforms->isIOReady())
+    {
+        status = PipelineTaskStatus::io_wait;
+        return true;
+    }
+    return false;
+}
+
 PipelineTaskResult PipelineTask::execute()
 {
     try
@@ -30,8 +50,10 @@ PipelineTaskResult PipelineTask::execute()
         MemoryTrackerSetter setter(true, getMemTracker());
         switch (status)
         {
-        case PipelineTaskStatus::running:
+        case PipelineTaskStatus::cpu_run:
         {
+            if (tryToIOMode())
+                return running();
             if (unlikely(!transforms->execute()))
                 status = PipelineTaskStatus::finish;
             return running();
@@ -39,7 +61,7 @@ PipelineTaskResult PipelineTask::execute()
         case PipelineTaskStatus::prepare:
         {
             transforms->prepare();
-            status = PipelineTaskStatus::running;
+            status = PipelineTaskStatus::cpu_run;
             return running();
         }
         case PipelineTaskStatus::finish:

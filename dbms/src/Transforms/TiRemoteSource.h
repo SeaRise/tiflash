@@ -49,6 +49,8 @@ class TiRemoteSource : public Source
 
     const LoggerPtr log;
 
+    bool done = false;
+
     uint64_t total_rows;
 
     // For fine grained shuffle, sender will partition data into muiltiple streams by hashing.
@@ -116,20 +118,29 @@ public:
         if (kill)
             remote_reader->cancel();
     }
+    bool isIOReady() override
+    {
+        if (done || !block_queue.empty())
+            return true;
+        auto fetch_result = fetchRemoteResult();
+        switch (fetch_result)
+        {
+        case FetchResult::finished:
+        {
+            done = true;
+            return true;
+        }
+        case FetchResult::notFetched:
+            return false;
+        default:
+            return true;
+        }
+    }
     std::pair<bool, Block> read() override
     {
-        if (block_queue.empty())
-        {
-            auto fetch_result = fetchRemoteResult();
-            switch (fetch_result)
-            {
-            case FetchResult::finished:
-                return {true, {}};
-            case FetchResult::notFetched:
-                return {false, {}};
-            default:;
-            }
-        }
+        if (done)
+            return {true, {}};
+        assert(!block_queue.empty()); 
         // todo should merge some blocks to make sure the output block is big enough
         Block block = block_queue.front();
         block_queue.pop();

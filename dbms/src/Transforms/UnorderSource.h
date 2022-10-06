@@ -17,6 +17,9 @@
 #include <Storages/DeltaMerge/SegmentReadTaskPool.h>
 #include <Transforms/Source.h>
 
+#include <atomic>
+#include <mutex>
+
 namespace DB
 {
 // copy from UnorderedInputStream
@@ -35,7 +38,6 @@ public:
         , physical_table_id(physical_table_id)
         , log(Logger::get("UnorderSource", req_id))
         , ref_no(0)
-        , task_pool_added(false)
     {
         if (extra_table_id_index != InvalidColumnID)
         {
@@ -57,11 +59,20 @@ public:
     {
         if (done)
             return {true, {}};
+        Block res;
+        std::swap(res, io_block);
+        return {true, std::move(res)};
+    }
+
+    bool isIOReady() override
+    {
+        if (done || io_block)
+            return true;
         while (true)
         {
             Block res;
             if (!task_pool->tryPopBlock(res))
-                return {false, {}};
+                return false;
             if (res)
             {
                 if (extra_table_id_index != InvalidColumnID)
@@ -79,14 +90,14 @@ public:
                 }
                 else
                 {
-                    total_rows += res.rows();
-                    return {true, std::move(res)};
+                    io_block = std::move(res);
+                    return true;
                 }
             }
             else
             {
                 done = true;
-                return {true, std::move(res)};
+                return true;
             }
         }
     }
@@ -104,9 +115,7 @@ public:
 private:
     void addReadTaskPoolToScheduler()
     {
-        RUNTIME_CHECK(!task_pool_added);
         std::call_once(task_pool->addToSchedulerFlag(), [&]() { DM::SegmentReadTaskScheduler::instance().add(task_pool); });
-        task_pool_added = true;
     }
 
 private:
@@ -115,10 +124,9 @@ private:
     // position of the ExtraPhysTblID column in column_names parameter in the StorageDeltaMerge::read function.
     const int extra_table_id_index;
     bool done = false;
+    Block io_block;
     TableID physical_table_id;
     LoggerPtr log;
     int64_t ref_no;
-    size_t total_rows = 0;
-    bool task_pool_added;
 };
 } // namespace DB

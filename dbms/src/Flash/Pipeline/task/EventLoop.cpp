@@ -17,7 +17,6 @@
 #include <Flash/Pipeline/dag/DAGScheduler.h>
 #include <Flash/Pipeline/dag/Event.h>
 #include <Flash/Pipeline/task/EventLoop.h>
-#include <Flash/Pipeline/task/IOReactor.h>
 #include <errno.h>
 
 namespace DB
@@ -25,18 +24,16 @@ namespace DB
 EventLoop::EventLoop(
     size_t loop_id_, 
     int core_, 
-    PipelineManager & pipeline_manager_, 
-    IOReactor & io_reactor_)
+    PipelineManager & pipeline_manager_)
     : loop_id(loop_id_)
     , core(core_)
     , pipeline_manager(pipeline_manager_)
-    , io_reactor(io_reactor_)
 {
     // TODO 2 thread for per event loop.
     t = std::thread(&EventLoop::loop, this);
 }
 
-void EventLoop::submit(PipelineTask & task)
+void EventLoop::submit(PipelineTask && task)
 {
     RUNTIME_ASSERT(
         event_queue.tryPush(std::move(task)) != MPMCQueueResult::FULL,
@@ -54,10 +51,10 @@ EventLoop::~EventLoop()
     LOG_INFO(logger, "stop event loop with cpu core: {}", core);
 }
 
-void EventLoop::handleTask(PipelineTask & task)
+void EventLoop::handleCpuModeTask(PipelineTask && task)
 {
 #ifndef NDEBUG
-    LOG_TRACE(logger, "handle task: {}", task.toString());
+    LOG_TRACE(logger, "handle cpu mode task: {}", task.toString());
 #endif
     auto result = task.execute();
     switch (result.type)
@@ -67,10 +64,12 @@ void EventLoop::handleTask(PipelineTask & task)
 #ifndef NDEBUG
         LOG_TRACE(logger, "task: {} is running", task.toString());
 #endif
-        RUNTIME_ASSERT(
-            event_queue.tryPush(std::move(task)) != MPMCQueueResult::FULL,
-            "EventLoop event queue full");
-        io_reactor.submit(loop_id, task);
+        if (task.status == PipelineTaskStatus::io_wait)
+            io_wait_queue.push(std::move(task));
+        else
+            RUNTIME_ASSERT(
+                event_queue.tryPush(std::move(task)) != MPMCQueueResult::FULL,
+                "EventLoop event queue full");
         break;
     }
     case PipelineTaskResultType::finished:
@@ -100,6 +99,69 @@ void EventLoop::handleTask(PipelineTask & task)
     }
 }
 
+bool EventLoop::cpuModeLoop(PipelineTask & task)
+{
+    while (likely(event_queue.pop(task) == MPMCQueueResult::OK))
+    {
+        handleCpuModeTask(std::move(task));
+        // switch to cpu and io loop.
+        if (!io_wait_queue.empty())
+            return true;
+    }
+    return false;
+}
+
+void EventLoop::handleIOModeTask(PipelineTask && task)
+{
+#ifndef NDEBUG
+    LOG_TRACE(logger, "handle io mode task: {}", task.toString());
+#endif
+    if (task.tryToCpuMode())
+        RUNTIME_ASSERT(
+            event_queue.tryPush(std::move(task)) != MPMCQueueResult::FULL,
+            "EventLoop event queue full");
+    else
+        io_wait_queue.push(std::move(task));
+}
+
+bool EventLoop::cpuAndIOModeLoop(PipelineTask & task)
+{
+    for (size_t i = 0; i < 60; ++i)
+    {
+        size_t cpu_mode_tasks = event_queue.size();
+        if (cpu_mode_tasks == 0)
+        {
+            if (unlikely(event_queue.getStatus() != MPMCQueueStatus::NORMAL))
+                return false;
+            else
+                break;
+        }
+        for (size_t j = 0; j < cpu_mode_tasks; ++j)
+        {
+            auto res = event_queue.tryPop(task);
+            switch (res)
+            {
+            case MPMCQueueResult::OK:
+                handleCpuModeTask(std::move(task));
+                break;
+            case MPMCQueueResult::EMPTY:
+                goto io_mode;
+            default:
+                return false;
+            }
+        }
+    }
+    io_mode:
+    size_t io_mode_tasks = io_wait_queue.size();
+    for (size_t i = 0; i < io_mode_tasks; ++i)
+    {
+        task = std::move(io_wait_queue.front());
+        io_wait_queue.pop();
+        handleIOModeTask(std::move(task));
+    }
+    return true;
+}
+
 void EventLoop::loop()
 {
 #ifdef __linux__
@@ -114,9 +176,18 @@ void EventLoop::loop()
     LOG_INFO(logger, "start event loop {} with cpu core: {}", loop_id, core);
 
     PipelineTask task;
-    while (likely(event_queue.pop(task) == MPMCQueueResult::OK))
+    while (true)
     {
-        handleTask(task);
+        if (io_wait_queue.empty())
+        {
+            if (unlikely(!cpuModeLoop(task)))
+                return;
+        }
+        else
+        {
+            if (unlikely(!cpuAndIOModeLoop(task)))
+                return;
+        }
     }
 }
 } // namespace DB

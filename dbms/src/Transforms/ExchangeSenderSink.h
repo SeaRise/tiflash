@@ -55,7 +55,7 @@ public:
         return async_writer->asyncFinishWrite();
     }
 
-    bool isReady() override
+    bool isIOReady() override
     {
         return async_writer->asyncIsReady();
     }

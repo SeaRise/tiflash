@@ -92,7 +92,6 @@ public:
     }
 
     bool tryToCpuMode();
-    bool tryToIOMode();
 
     String toString() const;
 

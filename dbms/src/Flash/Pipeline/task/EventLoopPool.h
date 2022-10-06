@@ -20,48 +20,52 @@
 
 #include <memory>
 #include <thread>
-#include <deque>
 
 namespace DB
 {
 struct PipelineManager;
 
-class EventLoop
+class EventLoopPool
 {
 public:
-    EventLoop(
-        size_t loop_id_, 
+    EventLoopPool(
+        size_t loop_id_,
+        size_t cpu_thread_count,
         const std::vector<int> & cpus_,
         PipelineManager & pipeline_manager_);
 
     void finish();
 
-    void submit(PipelineTask && task);
+    void submit(std::vector<PipelineTask> & tasks);
 
-    ~EventLoop();
+    ~EventLoopPool();
 
 private:
-    void loop();
+    void submitCPU(PipelineTask && task);
+    void submitIO(PipelineTask && task);
 
     void handleCpuModeTask(PipelineTask && task);
     void handleIOModeTask(PipelineTask && task);
 
-    bool cpuModeLoop(PipelineTask & task);
+    void cpuModeLoop();
+    void ioModeLoop();
 
-    bool cpuAndIOModeLoop(PipelineTask & task);
+    void handleFinishTask(const PipelineTask & task);
+    void handleErrTask(const PipelineTask & task, const PipelineTaskResult & result);
 
     void setCPUAffinity();
 
 private:
     size_t loop_id;
     std::vector<int> cpus;
-    MPMCQueue<PipelineTask> event_queue{499999};
-    std::deque<PipelineTask> io_wait_queue;
-
     PipelineManager & pipeline_manager;
-    LoggerPtr logger = Logger::get(fmt::format("event loop {}", loop_id));
-    std::thread t;
+    MPMCQueue<PipelineTask> cpu_event_queue{499999};
+    MPMCQueue<PipelineTask> io_event_queue{499999};
+    std::vector<std::thread> cpu_threads;
+    std::thread io_thread;
+
+    LoggerPtr logger = Logger::get(fmt::format("event loop pool {}", loop_id));
 };
 
-using EventLoopPtr = std::unique_ptr<EventLoop>;
+using EventLoopPoolPtr = std::unique_ptr<EventLoopPool>;
 } // namespace DB

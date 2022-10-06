@@ -25,7 +25,7 @@
 #include <Interpreters/Context.h>
 #include <Storages/Transaction/TypeMapping.h>
 #include <Transforms/SquashTransform.h>
-#include <Transforms/TiRemoteSource.h>
+#include <Transforms/ExchangeReceiverSource.h>
 #include <Transforms/TransformsPipeline.h>
 #include <fmt/format.h>
 

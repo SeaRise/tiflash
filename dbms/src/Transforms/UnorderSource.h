@@ -17,7 +17,6 @@
 #include <Storages/DeltaMerge/SegmentReadTaskPool.h>
 #include <Transforms/Source.h>
 
-#include <atomic>
 #include <mutex>
 
 namespace DB
@@ -57,15 +56,26 @@ public:
 
     std::pair<bool, Block> read() override
     {
+        std::lock_guard lock(mutex);
         if (done)
             return {true, {}};
         Block res;
         std::swap(res, io_block);
+        if (extra_table_id_index != InvalidColumnID)
+        {
+            auto & extra_table_id_col_define = DM::getExtraTableIDColumnDefine();
+            ColumnWithTypeAndName col{{}, extra_table_id_col_define.type, extra_table_id_col_define.name, extra_table_id_col_define.id};
+            size_t row_number = res.rows();
+            auto col_data = col.type->createColumnConst(row_number, Field(physical_table_id));
+            col.column = std::move(col_data);
+            res.insert(extra_table_id_index, std::move(col));
+        }
         return {true, std::move(res)};
     }
 
     bool isIOReady() override
     {
+        std::lock_guard lock(mutex);
         if (done || io_block)
             return true;
         while (true)
@@ -75,15 +85,6 @@ public:
                 return false;
             if (res)
             {
-                if (extra_table_id_index != InvalidColumnID)
-                {
-                    auto & extra_table_id_col_define = DM::getExtraTableIDColumnDefine();
-                    ColumnWithTypeAndName col{{}, extra_table_id_col_define.type, extra_table_id_col_define.name, extra_table_id_col_define.id};
-                    size_t row_number = res.rows();
-                    auto col_data = col.type->createColumnConst(row_number, Field(physical_table_id));
-                    col.column = std::move(col_data);
-                    res.insert(extra_table_id_index, std::move(col));
-                }
                 if (!res.rows())
                 {
                     continue;
@@ -128,5 +129,7 @@ private:
     TableID physical_table_id;
     LoggerPtr log;
     int64_t ref_no;
+
+    std::mutex mutex;
 };
 } // namespace DB

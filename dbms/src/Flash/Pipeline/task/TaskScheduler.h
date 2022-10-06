@@ -16,7 +16,7 @@
 
 #include <Common/Logger.h>
 #include <Flash/Mpp/MPPTaskId.h>
-#include <Flash/Pipeline/task/EventLoop.h>
+#include <Flash/Pipeline/task/EventLoopPool.h>
 #include <Server/ServerInfo.h>
 
 #include <functional>
@@ -39,10 +39,9 @@ public:
     size_t concurrency() const;
 
 private:
-    // start index of numa in event_loops
-    std::vector<size_t> numa_indexes;
-    size_t numa_num = 0;
-    std::vector<EventLoopPtr> event_loops;
+    std::vector<EventLoopPoolPtr> event_loop_pools;
+
+    size_t loop_count = 0;
 
     LoggerPtr log = Logger::get("TaskScheduler");
 };

@@ -25,6 +25,7 @@ String PipelineTask::toString() const
 
 bool PipelineTask::tryToCpuMode()
 {
+    MemoryTrackerSetter setter(true, getMemTracker());
     if (transforms->isIOReady())
     {
         status = PipelineTaskStatus::cpu_run;

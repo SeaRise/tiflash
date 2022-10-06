@@ -25,84 +25,43 @@ TaskScheduler::TaskScheduler(PipelineManager & pipeline_manager, const ServerInf
     auto numa_nodes = DM::getNumaNodes(log->getLog());
     LOG_FMT_INFO(log, "numa_nodes {} => {}", numa_nodes.size(), numa_nodes);
     RUNTIME_ASSERT(!numa_nodes.empty());
-    numa_indexes.emplace_back(0);
-    size_t loop_id = 0;
-    for (const auto & node : numa_nodes)
+    for (size_t loop_id = 0; loop_id < numa_nodes.size(); ++loop_id)
     {
-        size_t numa_size = node.empty() ? server_info.cpu_info.logical_cores : node.size();
-        event_loops.reserve(event_loops.size() + numa_size);
-        for (size_t i = 0; i < numa_size; ++i)
-            event_loops.emplace_back(std::make_unique<EventLoop>(loop_id++, node, pipeline_manager));
-        numa_indexes.emplace_back(event_loops.size());
+        const auto & node = numa_nodes[loop_id];
+        size_t thread_count = node.empty() ? server_info.cpu_info.logical_cores : node.size();
+        event_loop_pools.emplace_back(std::make_unique<EventLoopPool>(loop_id, thread_count, node, pipeline_manager));
+        loop_count += thread_count;
     }
-    numa_num = numa_indexes.size() - 1;
-    LOG_DEBUG(log, "init {} event loop success", event_loops.size());
 }
 
 TaskScheduler::~TaskScheduler()
 {
-    for (const auto & event_loop : event_loops)
-        event_loop->finish();
-    event_loops.clear();
+    for (const auto & event_loop_pool : event_loop_pools)
+        event_loop_pool->finish();
+    event_loop_pools.clear();
 }
 
 void TaskScheduler::submit(std::vector<PipelineTask> & tasks)
 {
     if (unlikely(tasks.empty()))
         return;
-    auto tso = tasks.back().mpp_task_id.start_ts;
-    auto pipeline_id = tasks.back().pipeline_id;
 
-    size_t i = 0;
-    while ((tasks.size() - i) >= event_loops.size())
-    {
-        for (const auto & event_loop : event_loops)
-            event_loop->submit(std::move(tasks[i++]));
-    }
-
-    static size_t numa_id_counter = tso % numa_num;
-    assert(numa_id_counter < numa_num);
-    auto next_numa_id = [&]() {
-        size_t numa_id = numa_id_counter++;
-        assert(numa_id < numa_indexes.size());
-        if (numa_id_counter == numa_num)
-            numa_id_counter = 0;
-        return numa_id;
+    size_t loop_id = tasks.back().mpp_task_id.start_ts % event_loop_pools.size();
+    assert(loop_id < event_loop_pools.size());
+    auto next_loop = [&]() -> EventLoopPool & {
+        assert(loop_id < event_loop_pools.size());
+        EventLoopPool & loop = *event_loop_pools[loop_id++];
+        if (loop_id == event_loop_pools.size())
+            loop_id = 0;
+        return loop;
     };
-    while (i < tasks.size())
-    {
-        auto numa_id = next_numa_id();
-        auto numa_index = numa_indexes[numa_id];
-        auto numa_end = numa_indexes[numa_id + 1];
-        size_t numa_core_num = numa_end - numa_index;
-        assert(numa_core_num > 0);
-        if ((tasks.size() - i) >= numa_core_num)
-        {
-            while (numa_index < numa_end)
-            {
-                assert(numa_index < event_loops.size());
-                event_loops[numa_index++]->submit(std::move(tasks[i++]));
-            }
-        }
-        else
-        {
-            size_t loop_index = numa_index + ((pipeline_id + tso) % numa_core_num);
-            assert(loop_index < numa_end);
-            auto next_loop = [&]() -> EventLoop & {
-                assert(loop_index < numa_end);
-                EventLoop & loop = *event_loops[loop_index++];
-                if (loop_index == numa_end)
-                    loop_index = numa_index;
-                return loop;
-            };
-            while (i < tasks.size())
-                next_loop().submit(std::move(tasks[i++]));
-        }
-    }
+
+    while(!tasks.empty())
+        next_loop().submit(tasks);
 }
 
 size_t TaskScheduler::concurrency() const
 {
-    return event_loops.size();
+    return loop_count;
 }
 } // namespace DB

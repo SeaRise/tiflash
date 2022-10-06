@@ -705,32 +705,32 @@ DecodeDetail ExchangeReceiverBase<RPCContext>::decodeChunks(
 }
 
 template <typename RPCContext>
-ExchangeReceiverResult ExchangeReceiverBase<RPCContext>::asyncNextResult(std::queue<Block> & block_queue, const Block & header, size_t stream_id)
+AsyncExchangeReceiverResult ExchangeReceiverBase<RPCContext>::asyncReceive(size_t stream_id)
 {
     if (unlikely(stream_id >= msg_channels.size()))
     {
         LOG_FMT_ERROR(exc_log, "stream_id out of range, stream_id: {}, total_stream_count: {}", stream_id, msg_channels.size());
-        return ExchangeReceiverResult::newError(0, "", "stream_id out of range");
+        return AsyncExchangeReceiverResult::newError(0, "", "stream_id out of range");
     }
     std::shared_ptr<ReceivedMessage> recv_msg;
     auto try_pop_result = msg_channels[stream_id]->tryPop(recv_msg);
     switch (try_pop_result)
     {
     case MPMCQueueResult::EMPTY:
-        return ExchangeReceiverResult::newAwait(name);
+        return AsyncExchangeReceiverResult::newAwait(name);
     case MPMCQueueResult::OK:
     {
         assert(recv_msg != nullptr);
         if (unlikely(recv_msg->error_ptr != nullptr))
-            return ExchangeReceiverResult::newError(recv_msg->source_index, recv_msg->req_info, recv_msg->error_ptr->msg());
-        return toDecodeResult(block_queue, header, recv_msg);
+            return AsyncExchangeReceiverResult::newError(recv_msg->source_index, recv_msg->req_info, recv_msg->error_ptr->msg());
+        return AsyncExchangeReceiverResult::newOk(recv_msg, recv_msg->source_index, recv_msg->req_info);;
     }
     default:
     {
         std::unique_lock lock(mu);
         return state != ExchangeReceiverState::NORMAL
-            ? ExchangeReceiverResult::newError(0, name, constructStatusString(state, err_msg))
-            : ExchangeReceiverResult::newEOF(name); /// live_connections == 0, msg_channel is finished, and state is NORMAL, that is the end.
+            ? AsyncExchangeReceiverResult::newError(0, name, constructStatusString(state, err_msg))
+            : AsyncExchangeReceiverResult::newEOF(name); /// live_connections == 0, msg_channel is finished, and state is NORMAL, that is the end.
     }
     }
 }

@@ -24,7 +24,6 @@
 namespace DB
 {
 class EventLoopPool;
-
 class EventLoop
 {
 public:

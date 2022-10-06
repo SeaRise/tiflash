@@ -61,9 +61,6 @@ void EventLoop::handleCpuModeTask(PipelineTask && task)
     {
     case PipelineTaskResultType::running:
     {
-#ifndef NDEBUG
-        LOG_TRACE(logger, "task: {} is running", task.toString());
-#endif
         if (task.status == PipelineTaskStatus::io_wait)
             io_wait_queue.emplace_back(std::move(task));
         else
@@ -72,9 +69,6 @@ void EventLoop::handleCpuModeTask(PipelineTask && task)
     }
     case PipelineTaskResultType::finished:
     {
-#ifndef NDEBUG
-        LOG_TRACE(logger, "task: {} is finished", task.toString());
-#endif
         if (task.status == PipelineTaskStatus::io_finish)
             io_wait_queue.emplace_back(std::move(task));
         else
@@ -88,9 +82,6 @@ void EventLoop::handleCpuModeTask(PipelineTask && task)
     }
     case PipelineTaskResultType::error:
     {
-#ifndef NDEBUG
-        LOG_TRACE(logger, "task: {} occur error", task.toString());
-#endif
         if (auto dag_scheduler = pipeline_manager.getDAGScheduler(task.mpp_task_id); likely(dag_scheduler))
         {
             dag_scheduler->submit(PipelineEvent::fail(result.err_msg));

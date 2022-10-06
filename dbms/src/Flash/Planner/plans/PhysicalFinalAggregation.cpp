@@ -49,7 +49,7 @@ void PhysicalFinalAggregation::transformImpl(DAGPipeline & pipeline, Context & /
 
 void PhysicalFinalAggregation::transform(TransformsPipeline & pipeline, Context & /*context*/, size_t concurrency)
 {
-    pipeline.init(concurrency);
+    pipeline.init(std::min(concurrency, aggregate_store->max_threads));
     auto reader = std::make_shared<FinalAggregateReader>(aggregate_store);
     pipeline.transform([&](auto & transforms) {
         transforms->setSource(std::make_shared<AggregateSource>(reader));

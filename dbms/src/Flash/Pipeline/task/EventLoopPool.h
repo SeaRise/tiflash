@@ -23,8 +23,30 @@
 
 namespace DB
 {
-struct PipelineManager;
+class EventLoopPool;
 
+class EventLoop
+{
+public:
+    EventLoop(
+        size_t loop_id_,
+        EventLoopPool & pool_);
+    void finish();
+    void submit(PipelineTask && task);
+    ~EventLoop();
+private:
+    void handleCpuModeTask(PipelineTask && task);
+    void cpuModeLoop();
+private:
+    size_t loop_id;
+    EventLoopPool & pool;
+    MPMCQueue<PipelineTask> cpu_event_queue{199999};
+    std::thread cpu_thread;
+    LoggerPtr logger = Logger::get(fmt::format("event loop {}", loop_id));
+};
+using EventLoopPtr = std::unique_ptr<EventLoop>;
+
+struct PipelineManager;
 class EventLoopPool
 {
 public:
@@ -36,7 +58,7 @@ public:
 
     void submit(std::vector<PipelineTask> & tasks);
 
-    size_t concurrency() const { return cpu_threads.size(); }
+    size_t concurrency() const { return cpu_loops.size(); }
 
     ~EventLoopPool();
 
@@ -53,15 +75,16 @@ private:
     void handleFinishTask(const PipelineTask & task);
     void handleErrTask(const PipelineTask & task, const PipelineTaskResult & result);
 private:
-    size_t loop_id;
     PipelineManager & pipeline_manager;
-    MPMCQueue<PipelineTask> cpu_event_queue{199999};
+
     MPMCQueue<PipelineTask> io_event_queue{199999};
-    std::vector<std::thread> cpu_threads;
     std::thread io_thread;
 
-    LoggerPtr logger = Logger::get(fmt::format("event loop pool {}", loop_id));
-};
+    std::vector<EventLoopPtr> cpu_loops;
 
+    LoggerPtr logger = Logger::get("event loop pool");
+
+    friend class EventLoop;
+};
 using EventLoopPoolPtr = std::unique_ptr<EventLoopPool>;
 } // namespace DB

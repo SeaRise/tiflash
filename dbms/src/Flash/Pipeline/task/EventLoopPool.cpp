@@ -21,14 +21,86 @@
 
 namespace DB
 {
+EventLoop::EventLoop(
+    size_t loop_id_,
+    EventLoopPool & pool_)
+    : loop_id(loop_id_)
+    , pool(pool_)
+{
+    cpu_thread = std::thread(&EventLoop::cpuModeLoop, this);
+}
+
+void EventLoop::finish()
+{
+    cpu_event_queue.finish();
+}
+
+void EventLoop::submit(PipelineTask && task)
+{
+    RUNTIME_ASSERT(
+        cpu_event_queue.tryPush(std::move(task)) != MPMCQueueResult::FULL,
+        "EventLoop cpu event queue full");
+}
+
+EventLoop::~EventLoop()
+{
+    cpu_thread.join();
+    LOG_INFO(logger, "stop event loop");
+}
+
+void EventLoop::handleCpuModeTask(PipelineTask && task)
+{
+#ifndef NDEBUG
+    LOG_TRACE(logger, "handle cpu mode task: {}", task.toString());
+#endif
+    auto result = task.execute();
+    switch (result.type)
+    {
+    case PipelineTaskResultType::running:
+    {
+        if (task.status == PipelineTaskStatus::io_wait)
+            pool.submitIO(std::move(task));
+        else
+            submit(std::move(task));
+        break;
+    }
+    case PipelineTaskResultType::finished:
+    {
+        if (task.status == PipelineTaskStatus::io_finish)
+            pool.submitIO(std::move(task));
+        else
+            pool.handleFinishTask(task);
+        break;
+    }
+    case PipelineTaskResultType::error:
+    {
+        pool.handleErrTask(task, result);
+        break;
+    }
+    default:
+        throw Exception("Unknown PipelineTaskResultType");
+    }
+}
+
+void EventLoop::cpuModeLoop()
+{
+    setThreadName("EventLoop");
+    PipelineTask task;
+    while (likely(cpu_event_queue.pop(task) == MPMCQueueResult::OK))
+    {
+        handleCpuModeTask(std::move(task));
+    }
+}
+
 EventLoopPool::EventLoopPool(
     size_t loop_num,
     PipelineManager & pipeline_manager_)
     : pipeline_manager(pipeline_manager_)
 {
-    cpu_threads.reserve(loop_num);
+    RUNTIME_ASSERT(loop_num > 0);
+    cpu_loops.reserve(loop_num);
     for (size_t i = 0; i < loop_num; ++i)
-        cpu_threads.emplace_back(std::thread(&EventLoopPool::cpuModeLoop, this));
+        cpu_loops.emplace_back(std::make_unique<EventLoop>(i, *this));
     io_thread = std::thread(&EventLoopPool::ioModeLoop, this);
 }
 
@@ -46,9 +118,14 @@ void EventLoopPool::submit(std::vector<PipelineTask> & tasks)
 
 void EventLoopPool::submitCPU(PipelineTask && task)
 {
-    RUNTIME_ASSERT(
-        cpu_event_queue.tryPush(std::move(task)) != MPMCQueueResult::FULL,
-        "EventLoopPool cpu event queue full");
+    thread_local size_t i = 0;
+    thread_local auto next_loop = [&]() -> EventLoop & {
+        auto & loop = *cpu_loops[i++];
+        if (i == cpu_loops.size())
+            i = 0;
+        return loop;
+    };
+    next_loop().submit(std::move(task));
 }
 
 void EventLoopPool::submitIO(PipelineTask && task)
@@ -60,14 +137,14 @@ void EventLoopPool::submitIO(PipelineTask && task)
 
 void EventLoopPool::finish()
 {
-    cpu_event_queue.finish();
+    for (auto & cpu_loop : cpu_loops)
+        cpu_loop->finish();
     io_event_queue.finish();
 }
 
 EventLoopPool::~EventLoopPool()
 {
-    for (auto & cpu_thread : cpu_threads)
-        cpu_thread.join();
+    cpu_loops.clear();
     io_thread.join();
     LOG_INFO(logger, "stop event loop pool");
 }
@@ -81,40 +158,6 @@ void EventLoopPool::handleErrTask(const PipelineTask & task, const PipelineTaskR
 {
     if (auto dag_scheduler = pipeline_manager.getDAGScheduler(task.mpp_task_id); likely(dag_scheduler))
         dag_scheduler->submit(PipelineEvent::fail(result.err_msg));
-}
-
-void EventLoopPool::handleCpuModeTask(PipelineTask && task)
-{
-#ifndef NDEBUG
-    LOG_TRACE(logger, "handle cpu mode task: {}", task.toString());
-#endif
-    auto result = task.execute();
-    switch (result.type)
-    {
-    case PipelineTaskResultType::running:
-    {
-        if (task.status == PipelineTaskStatus::io_wait)
-            submitIO(std::move(task));
-        else
-            submitCPU(std::move(task));
-        break;
-    }
-    case PipelineTaskResultType::finished:
-    {
-        if (task.status == PipelineTaskStatus::io_finish)
-            submitIO(std::move(task));
-        else
-            handleFinishTask(task);
-        break;
-    }
-    case PipelineTaskResultType::error:
-    {
-        handleErrTask(task, result);
-        break;
-    }
-    default:
-        throw Exception("Unknown PipelineTaskResultType");
-    }
 }
 
 void EventLoopPool::handleIOModeTask(PipelineTask && task)
@@ -142,16 +185,6 @@ void EventLoopPool::handleIOModeTask(PipelineTask && task)
     }
     default:
         throw Exception("just throw");
-    }
-}
-
-void EventLoopPool::cpuModeLoop()
-{
-    setThreadName("EventLoopPool");
-    PipelineTask task;
-    while (likely(cpu_event_queue.pop(task) == MPMCQueueResult::OK))
-    {
-        handleCpuModeTask(std::move(task));
     }
 }
 

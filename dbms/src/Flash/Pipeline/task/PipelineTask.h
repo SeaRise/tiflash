@@ -28,6 +28,7 @@ enum class PipelineTaskStatus
     finish,
     // io mode
     io_wait,
+    io_finish,
 };
 
 enum class PipelineTaskResultType

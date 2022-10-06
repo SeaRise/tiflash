@@ -49,7 +49,7 @@ public:
     bool execute();
 
     void prepare();
-    bool finish();
+    void finish();
 
     void cancel(bool kill);
 

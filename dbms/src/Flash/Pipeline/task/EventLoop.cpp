@@ -65,7 +65,7 @@ void EventLoop::handleCpuModeTask(PipelineTask && task)
         LOG_TRACE(logger, "task: {} is running", task.toString());
 #endif
         if (task.status == PipelineTaskStatus::io_wait)
-            io_wait_queue.push(std::move(task));
+            io_wait_queue.emplace_back(std::move(task));
         else
             RUNTIME_ASSERT(
                 event_queue.tryPush(std::move(task)) != MPMCQueueResult::FULL,
@@ -77,9 +77,14 @@ void EventLoop::handleCpuModeTask(PipelineTask && task)
 #ifndef NDEBUG
         LOG_TRACE(logger, "task: {} is finished", task.toString());
 #endif
-        if (auto dag_scheduler = pipeline_manager.getDAGScheduler(task.mpp_task_id); likely(dag_scheduler))
+        if (task.status == PipelineTaskStatus::io_finish)
+            io_wait_queue.emplace_back(std::move(task));
+        else
         {
-            dag_scheduler->submit(PipelineEvent::finish(task.task_id, task.pipeline_id));
+            if (auto dag_scheduler = pipeline_manager.getDAGScheduler(task.mpp_task_id); likely(dag_scheduler))
+            {
+                dag_scheduler->submit(PipelineEvent::finish(task.task_id, task.pipeline_id));
+            }
         }
         break;
     }
@@ -116,12 +121,34 @@ void EventLoop::handleIOModeTask(PipelineTask && task)
 #ifndef NDEBUG
     LOG_TRACE(logger, "handle io mode task: {}", task.toString());
 #endif
-    if (task.tryToCpuMode())
-        RUNTIME_ASSERT(
-            event_queue.tryPush(std::move(task)) != MPMCQueueResult::FULL,
-            "EventLoop event queue full");
-    else
-        io_wait_queue.push(std::move(task));
+    switch(task.status)
+    {
+    case PipelineTaskStatus::io_wait:
+    {
+        if (task.tryToCpuMode())
+            RUNTIME_ASSERT(
+                event_queue.tryPush(std::move(task)) != MPMCQueueResult::FULL,
+                "EventLoop event queue full");
+        else
+            io_wait_queue.emplace_back(std::move(task));
+        break;
+    }
+    case PipelineTaskStatus::io_finish:
+    {
+        if (task.tryToCpuMode())
+        {
+            if (auto dag_scheduler = pipeline_manager.getDAGScheduler(task.mpp_task_id); likely(dag_scheduler))
+            {
+                dag_scheduler->submit(PipelineEvent::finish(task.task_id, task.pipeline_id));
+            }
+        }
+        else
+            io_wait_queue.emplace_back(std::move(task));
+        break;
+    }
+    default:
+        throw Exception("just throw");
+    }
 }
 
 bool EventLoop::cpuAndIOModeLoop(PipelineTask & task)
@@ -156,7 +183,7 @@ bool EventLoop::cpuAndIOModeLoop(PipelineTask & task)
     for (size_t i = 0; i < io_mode_tasks; ++i)
     {
         task = std::move(io_wait_queue.front());
-        io_wait_queue.pop();
+        io_wait_queue.pop_front();
         handleIOModeTask(std::move(task));
     }
     return true;

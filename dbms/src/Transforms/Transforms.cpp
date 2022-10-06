@@ -64,17 +64,10 @@ void Transforms::prepare()
     source->prepare();
 }
 
-bool Transforms::finish()
+void Transforms::finish()
 {
-    if (sink->finish())
-    {
-        source->finish();
-        return true;
-    }
-    else
-    {
-        return false;
-    }
+    sink->finish();
+    source->finish();
 }
 
 void Transforms::cancel(bool kill)

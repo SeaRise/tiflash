@@ -24,7 +24,7 @@ public:
     virtual ~AsyncWriter() = default;
 
     virtual void asyncWrite(Block && block) = 0;
-    virtual bool asyncFinishWrite() = 0;
+    virtual void asyncFinishWrite() = 0;
     virtual bool asyncIsReady() = 0;
 };
 

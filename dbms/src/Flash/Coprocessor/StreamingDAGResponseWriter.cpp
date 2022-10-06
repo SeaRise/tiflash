@@ -176,10 +176,9 @@ void StreamingDAGResponseWriter<StreamWriterPtr>::asyncWrite(Block && block)
 }
 
 template <class StreamWriterPtr>
-bool StreamingDAGResponseWriter<StreamWriterPtr>::asyncFinishWrite()
+void StreamingDAGResponseWriter<StreamWriterPtr>::asyncFinishWrite()
 {
     asyncEncodeThenWriteBlocks();
-    return asyncIsReady();
 }
 
 template <class StreamWriterPtr>

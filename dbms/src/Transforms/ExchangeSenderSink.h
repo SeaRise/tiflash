@@ -50,9 +50,9 @@ public:
         return true;
     }
 
-    bool finish() override
+    void finish() override
     {
-        return async_writer->asyncFinishWrite();
+        async_writer->asyncFinishWrite();
     }
 
     bool isIOReady() override

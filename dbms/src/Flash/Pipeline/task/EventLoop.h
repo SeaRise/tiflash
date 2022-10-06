@@ -20,7 +20,7 @@
 
 #include <memory>
 #include <thread>
-#include <queue>
+#include <deque>
 
 namespace DB
 {
@@ -54,7 +54,7 @@ private:
     size_t loop_id;
     int core;
     MPMCQueue<PipelineTask> event_queue{499999};
-    std::queue<PipelineTask> io_wait_queue;
+    std::deque<PipelineTask> io_wait_queue;
 
     PipelineManager & pipeline_manager;
     LoggerPtr logger = Logger::get(fmt::format("event loop {} with cpu_core {}", loop_id, core));

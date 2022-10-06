@@ -39,7 +39,7 @@ public:
     void finishWrite() override;
 
     void asyncWrite(Block && block) override;
-    bool asyncFinishWrite() override;
+    void asyncFinishWrite() override;
     bool asyncIsReady() override;
 
 private:

@@ -35,7 +35,7 @@ public:
 
     bool write(Block & block) override;
 
-    bool finish() override;
+    void finish() override;
 
 private:
     SortDescription description;

@@ -155,10 +155,9 @@ void HashPartitionWriter<StreamWriterPtr>::asyncWrite(Block && block)
 }
 
 template <class StreamWriterPtr>
-bool HashPartitionWriter<StreamWriterPtr>::asyncFinishWrite()
+void HashPartitionWriter<StreamWriterPtr>::asyncFinishWrite()
 {
     asyncPartitionAndEncodeThenWriteBlocks();
-    return asyncIsReady();
 }
 
 template <class StreamWriterPtr>

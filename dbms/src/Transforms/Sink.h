@@ -25,7 +25,7 @@ class Sink
 public:
     virtual ~Sink() = default;
     virtual bool write(Block & block) = 0;
-    virtual bool finish() { return true; }
+    virtual void finish() {}
     virtual bool isIOReady() { return true; }
 };
 

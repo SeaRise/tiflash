@@ -33,16 +33,6 @@ bool PipelineTask::tryToCpuMode()
     return false;
 }
 
-bool PipelineTask::tryToIOMode()
-{
-    if (!transforms->isIOReady())
-    {
-        status = PipelineTaskStatus::io_wait;
-        return true;
-    }
-    return false;
-}
-
 PipelineTaskResult PipelineTask::execute()
 {
     try
@@ -52,8 +42,11 @@ PipelineTaskResult PipelineTask::execute()
         {
         case PipelineTaskStatus::cpu_run:
         {
-            if (tryToIOMode())
+            if (!transforms->isIOReady())
+            {
+                status = PipelineTaskStatus::io_wait;
                 return running();
+            }
             if (unlikely(!transforms->execute()))
                 status = PipelineTaskStatus::finish;
             return running();
@@ -66,7 +59,10 @@ PipelineTaskResult PipelineTask::execute()
         }
         case PipelineTaskStatus::finish:
         {
-            return transforms->finish() ? finish() : running();
+            transforms->finish();
+            if (!transforms->isIOReady())
+                status = PipelineTaskStatus::io_finish;
+            return finish();
         }
         default:
             return fail("unknown status");

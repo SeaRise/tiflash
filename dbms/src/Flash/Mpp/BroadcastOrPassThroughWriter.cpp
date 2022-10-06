@@ -115,10 +115,9 @@ void BroadcastOrPassThroughWriter<StreamWriterPtr>::asyncWrite(Block && block)
 }
 
 template <class StreamWriterPtr>
-bool BroadcastOrPassThroughWriter<StreamWriterPtr>::asyncFinishWrite()
+void BroadcastOrPassThroughWriter<StreamWriterPtr>::asyncFinishWrite()
 {
     asyncEncodeThenWriteBlocks();
-    return asyncIsReady();
 }
 
 template <class StreamWriterPtr>

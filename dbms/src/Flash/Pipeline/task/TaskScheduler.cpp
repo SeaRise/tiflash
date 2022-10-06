@@ -24,29 +24,16 @@ TaskScheduler::TaskScheduler(PipelineManager & pipeline_manager, const ServerInf
 {
     auto numa_nodes = DM::getNumaNodes(log->getLog());
     LOG_FMT_INFO(log, "numa_nodes {} => {}", numa_nodes.size(), numa_nodes);
-    if (numa_nodes.size() == 1 && numa_nodes.back().empty())
+    RUNTIME_ASSERT(!numa_nodes.empty());
+    numa_indexes.emplace_back(0);
+    size_t loop_id = 0;
+    for (const auto & node : numa_nodes)
     {
-        numa_indexes.emplace_back(0);
-        int logical_cores = server_info.cpu_info.logical_cores;
-        RUNTIME_ASSERT(logical_cores > 0);
-        event_loops.reserve(logical_cores);
-        for (int core = 0; core < logical_cores; ++core)
-            event_loops.emplace_back(std::make_unique<EventLoop>(core, core, pipeline_manager));
+        size_t numa_size = node.empty() ? server_info.cpu_info.logical_cores : node.size();
+        event_loops.reserve(event_loops.size() + numa_size);
+        for (size_t i = 0; i < numa_size; ++i)
+            event_loops.emplace_back(std::make_unique<EventLoop>(loop_id++, node, pipeline_manager));
         numa_indexes.emplace_back(event_loops.size());
-    }
-    else
-    {
-        RUNTIME_ASSERT(!numa_nodes.empty());
-        numa_indexes.emplace_back(0);
-        size_t loop_id = 0;
-        for (const auto & node : numa_nodes)
-        {
-            RUNTIME_ASSERT(!node.empty());
-            event_loops.reserve(event_loops.size() + node.size());
-            for (auto core : node)
-                event_loops.emplace_back(std::make_unique<EventLoop>(loop_id++, core, pipeline_manager));
-            numa_indexes.emplace_back(event_loops.size());
-        }
     }
     numa_num = numa_indexes.size() - 1;
     LOG_DEBUG(log, "init {} event loop success", event_loops.size());

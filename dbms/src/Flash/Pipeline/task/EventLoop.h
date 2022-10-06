@@ -31,7 +31,7 @@ class EventLoop
 public:
     EventLoop(
         size_t loop_id_, 
-        int core_, 
+        const std::vector<int> & cpus_,
         PipelineManager & pipeline_manager_);
 
     void finish();
@@ -50,14 +50,16 @@ private:
 
     bool cpuAndIOModeLoop(PipelineTask & task);
 
+    void setCPUAffinity();
+
 private:
     size_t loop_id;
-    int core;
+    std::vector<int> cpus;
     MPMCQueue<PipelineTask> event_queue{499999};
     std::deque<PipelineTask> io_wait_queue;
 
     PipelineManager & pipeline_manager;
-    LoggerPtr logger = Logger::get(fmt::format("event loop {} with cpu_core {}", loop_id, core));
+    LoggerPtr logger = Logger::get(fmt::format("event loop {}", loop_id));
     std::thread t;
 };
 

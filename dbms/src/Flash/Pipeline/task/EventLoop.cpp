@@ -23,10 +23,10 @@ namespace DB
 {
 EventLoop::EventLoop(
     size_t loop_id_, 
-    int core_, 
+    const std::vector<int> & cpus_,
     PipelineManager & pipeline_manager_)
     : loop_id(loop_id_)
-    , core(core_)
+    , cpus(cpus_)
     , pipeline_manager(pipeline_manager_)
 {
     // TODO 2 thread for per event loop.
@@ -48,7 +48,7 @@ void EventLoop::finish()
 EventLoop::~EventLoop()
 {
     t.join();
-    LOG_INFO(logger, "stop event loop with cpu core: {}", core);
+    LOG_INFO(logger, "stop event loop {}", loop_id);
 }
 
 void EventLoop::handleCpuModeTask(PipelineTask && task)
@@ -67,9 +67,7 @@ void EventLoop::handleCpuModeTask(PipelineTask && task)
         if (task.status == PipelineTaskStatus::io_wait)
             io_wait_queue.emplace_back(std::move(task));
         else
-            RUNTIME_ASSERT(
-                event_queue.tryPush(std::move(task)) != MPMCQueueResult::FULL,
-                "EventLoop event queue full");
+            submit(std::move(task));
         break;
     }
     case PipelineTaskResultType::finished:
@@ -126,9 +124,7 @@ void EventLoop::handleIOModeTask(PipelineTask && task)
     case PipelineTaskStatus::io_wait:
     {
         if (task.tryToCpuMode())
-            RUNTIME_ASSERT(
-                event_queue.tryPush(std::move(task)) != MPMCQueueResult::FULL,
-                "EventLoop event queue full");
+            submit(std::move(task));
         else
             io_wait_queue.emplace_back(std::move(task));
         break;
@@ -189,18 +185,36 @@ bool EventLoop::cpuAndIOModeLoop(PipelineTask & task)
     return true;
 }
 
-void EventLoop::loop()
+void EventLoop::setCPUAffinity()
 {
+    if (cpus.empty())
+    {
+        return;
+    }
 #ifdef __linux__
     cpu_set_t cpu_set;
     CPU_ZERO(&cpu_set);
-    CPU_SET(core, &cpu_set);
+    for (int i : cpus)
+    {
+        CPU_SET(i, &cpu_set);
+    }
     int ret = sched_setaffinity(0, sizeof(cpu_set), &cpu_set);
-    if (unlikely(ret != 0))
-        throw Exception(fmt::format("sched_setaffinity fail: {}", std::strerror(errno)));
+    if (ret != 0)
+    {
+        // It can be failed due to some CPU core cannot access, such as CPU offline.
+        LOG_WARNING(logger, "sched_setaffinity fail, cpus={} errno={}", cpus, std::strerror(errno));
+    }
+    else
+    {
+        LOG_FMT_DEBUG(logger, "sched_setaffinity succ, cpus={}", cpus);
+    }
 #endif
-    setThreadName(fmt::format("el<{},{}>", loop_id, core).c_str());
-    LOG_INFO(logger, "start event loop {} with cpu core: {}", loop_id, core);
+}
+
+void EventLoop::loop()
+{
+    setCPUAffinity();
+    setThreadName(fmt::format("loop_{}", loop_id).c_str());
 
     PipelineTask task;
     while (true)

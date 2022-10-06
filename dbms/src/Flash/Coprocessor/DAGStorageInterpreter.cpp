@@ -399,6 +399,7 @@ void DAGStorageInterpreter::executeImpl(TransformsPipeline & pipeline)
         sources.emplace_back(std::make_shared<NullSource>(storage_for_logical_table->getSampleBlockForColumns(required_columns)));
 
     auto remote_requests = buildRemoteRequests();
+    RUNTIME_ASSERT(remote_requests.empty());
 
     // A failpoint to test pause before alter lock released
     FAIL_POINT_PAUSE(FailPoints::pause_with_alter_locks_acquired);

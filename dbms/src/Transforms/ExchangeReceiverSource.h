@@ -60,7 +60,7 @@ public:
     bool isIOReady() override
     {
         std::lock_guard lock(mutex);
-        if (done || !block_queue.empty())
+        if (done || !block_queue.empty() || !error_msg.empty())
             return true;
         auto fetch_result = fetchRemoteResult();
         switch (fetch_result)
@@ -83,12 +83,18 @@ public:
             return {true, {}};
         if (block_queue.empty())
         {
+            if (unlikely(!error_msg.empty()))
+            {
+                LOG_WARNING(log, "remote reader meets error: {}", error_msg);
+                throw Exception(error_msg);
+            }
             auto result = remote_reader->toDecodeResult(block_queue, sample_block, recv_msg);
             if (result.meet_error)
             {
                 LOG_WARNING(log, "remote reader meets error: {}", result.error_msg);
                 throw Exception(result.error_msg);
             }
+            recv_msg = nullptr;
         }
         // todo should merge some blocks to make sure the output block is big enough
         Block block = block_queue.front();
@@ -102,7 +108,11 @@ private:
         while (true)
         {
             auto result = remote_reader->asyncReceive(stream_id);
-            RUNTIME_ASSERT(!result.meet_error);
+            if (result.meet_error)
+            {
+                error_msg = result.error_msg;
+                return FetchResult::fetched;
+            }
             if (result.eof)
                 return FetchResult::finished;
             if (result.await)
@@ -137,5 +147,6 @@ private:
 
     std::mutex mutex;
     std::shared_ptr<ReceivedMessage> recv_msg;
+    String error_msg;
 };
 } // namespace DB

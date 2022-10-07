@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include <Transforms/FinalAggregateReader.h>
+#include <Interpreters/AggregateStore.h>
 #include <Transforms/Source.h>
 
 namespace DB
@@ -23,21 +23,21 @@ class AggregateSource : public Source
 {
 public:
     explicit AggregateSource(
-        const FinalAggregateReaderPtr & final_agg_reader_)
-        : final_agg_reader(final_agg_reader_)
+        const AggregateStorePtr & agg_store_)
+        : agg_store(agg_store_)
     {}
 
     std::pair<bool, Block> read() override
     {
-        return {true, final_agg_reader->read()};
+        return {true, agg_store->readForMerge()};
     }
 
     Block getHeader() const override
     {
-        return final_agg_reader->getHeader();
+        return agg_store->getHeaderForMerge();
     }
 
 private:
-    FinalAggregateReaderPtr final_agg_reader;
+    AggregateStorePtr agg_store;
 };
 } // namespace DB

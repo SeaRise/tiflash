@@ -91,12 +91,10 @@ PhysicalPlanNodePtr PhysicalAggregation::build(
     }
     else
     {
-        const auto & settings = context.getSettingsRef();
         AggregateStorePtr aggregate_store = std::make_shared<AggregateStore>(
             log->identifier(),
             context.getFileProvider(),
-            true,
-            settings.aggregation_memory_efficient_merge_threads ? static_cast<size_t>(settings.aggregation_memory_efficient_merge_threads) : static_cast<size_t>(settings.max_threads));
+            true);
 
         auto physical_partial_agg = std::make_shared<PhysicalPartialAggregation>(
             executor_id,

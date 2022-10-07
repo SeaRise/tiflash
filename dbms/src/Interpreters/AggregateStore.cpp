@@ -17,18 +17,36 @@
 
 namespace DB
 {
+namespace
+{
+class MergeLock
+{
+public:
+    MergeLock(std::vector<std::shared_mutex> & mutexes_): mutexes(mutexes_)
+    {
+        for (auto & mutex : mutexes)
+            mutex.lock_shared();
+    }
+    
+    ~MergeLock()
+    {
+        for (auto & mutex : mutexes)
+            mutex.unlock_shared();
+    }
+
+private:
+    std::vector<std::shared_mutex> & mutexes;
+};
+}
+
 AggregateStore::AggregateStore(
     const String & req_id,
     const FileProviderPtr & file_provider_,
-    bool is_final_,
-    size_t temporary_data_merge_threads_)
+    bool is_final_)
     : file_provider(file_provider_)
     , is_final(is_final_)
-    , temporary_data_merge_threads(temporary_data_merge_threads_)
     , log(Logger::get("AggregateStore", req_id))
-{
-    assert(temporary_data_merge_threads > 0);
-}
+{}
 
 void AggregateStore::init(size_t max_threads_, const Aggregator::Params & params)
 {
@@ -46,7 +64,7 @@ void AggregateStore::init(size_t max_threads_, const Aggregator::Params & params
     for (size_t i = 0; i < max_threads; ++i)
         threads_data.emplace_back(params.keys_size, params.aggregates_size);
 
-    mutexs = std::make_unique<std::vector<std::mutex>>(max_threads);
+    mutexes = std::make_unique<std::vector<std::shared_mutex>>(max_threads);
 
     aggregator = std::make_unique<Aggregator>(params, log->identifier());
 }
@@ -59,7 +77,7 @@ Block AggregateStore::getHeader() const
 void AggregateStore::executeOnBlock(size_t index, const Block & block)
 {
     assert(index < max_threads);
-    std::lock_guard lock((*mutexs)[index]);
+    std::unique_lock lock((*mutexes)[index]);
     executeOnBlockWithoutLock(index, block);
 }
 
@@ -80,37 +98,9 @@ void AggregateStore::executeOnBlockWithoutLock(size_t index, const Block & block
     thread_data.src_bytes += block.bytes();
 }
 
-void AggregateStore::tryFlush(size_t index)
-{
-    if (aggregator->hasTemporaryFiles())
-    {
-        /// Flush data in the RAM to disk. So it's easier to unite them later.
-        auto & data = *many_data[index];
+void AggregateStore::tryFlush(size_t) {}
 
-        if (data.isConvertibleToTwoLevel())
-            data.convertToTwoLevel();
-
-        if (!data.empty())
-            aggregator->writeToTemporaryFile(data, file_provider);
-    }
-}
-
-void AggregateStore::tryFlush()
-{
-    if (aggregator->hasTemporaryFiles())
-    {
-        /// It may happen that some data has not yet been flushed,
-        ///  because at the time of `onFinishThread` call, no data has been flushed to disk, and then some were.
-        for (const auto & data : many_data)
-        {
-            if (data->isConvertibleToTwoLevel())
-                data->convertToTwoLevel();
-
-            if (!data->empty())
-                aggregator->writeToTemporaryFile(*data, file_provider);
-        }
-    }
-}
+void AggregateStore::tryFlush() {}
 
 std::unique_ptr<IBlockInputStream> AggregateStore::merge()
 {
@@ -118,21 +108,31 @@ std::unique_ptr<IBlockInputStream> AggregateStore::merge()
     return aggregator->mergeAndConvertToBlocks(many_data, is_final, max_threads, true);
 }
 
-std::pair<size_t, size_t> AggregateStore::mergeSrcRowsAndBytes() const
-{
-    size_t total_src_rows = 0;
-    size_t total_src_bytes = 0;
-    for (const auto & thread_data : threads_data)
-    {
-        total_src_rows += thread_data.src_rows;
-        total_src_bytes += thread_data.src_bytes;
-    }
-    return {total_src_rows, total_src_bytes};
-}
-
 bool AggregateStore::isTwoLevel() const
 {
+    MergeLock lock(*mutexes);
     assert(!many_data.empty());
     return many_data[0]->isTwoLevel();
+}
+
+void AggregateStore::initForMerge()
+{
+    MergeLock lock(*mutexes);
+    RUNTIME_ASSERT(!aggregator->hasTemporaryFiles());
+    impl = aggregator->mergeAndConvertToBlocks(many_data, is_final, max_threads, true);
+}
+
+Block AggregateStore::readForMerge()
+{
+    MergeLock lock(*mutexes);
+    assert(impl);
+    return impl->read();
+}
+
+Block AggregateStore::getHeaderForMerge()
+{
+    MergeLock lock(*mutexes);
+    assert(impl);
+    return impl->getHeader();
 }
 } // namespace DB

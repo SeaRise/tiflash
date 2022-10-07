@@ -1659,28 +1659,23 @@ protected:
             return {};
 
         Block res;
-        while (true)
+        int num = current_bucket_num.fetch_add(1);
+        while(num < NUM_BUCKETS)
         {
-            int num = current_bucket_num.fetch_add(1);
-            if (num < NUM_BUCKETS)
+            // thread safe.
+            thread(num);
             {
-                // thread safe.
-                thread(num);
-
-                auto it = parallel_merge_data->ready_blocks.end();
-                {
-                    std::unique_lock lock(parallel_merge_data->mutex);
-                    it = parallel_merge_data->ready_blocks.find(num);
-                    RUNTIME_ASSERT(it != parallel_merge_data->ready_blocks.end());
-                }
+                std::unique_lock lock(parallel_merge_data->mutex);
+                auto it = parallel_merge_data->ready_blocks.find(num);
+                RUNTIME_ASSERT(it != parallel_merge_data->ready_blocks.end());
                 if (it->second)
                 {
                     res.swap(it->second);
                     break;
                 }
             }
+            num = current_bucket_num.fetch_add(1);
         }
-
         return res;
     }
 

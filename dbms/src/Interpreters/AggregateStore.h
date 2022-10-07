@@ -56,8 +56,7 @@ public:
     AggregateStore(
         const String & req_id,
         const FileProviderPtr & file_provider_,
-        bool is_final_,
-        size_t temporary_data_merge_threads_);
+        bool is_final_);
 
     Block getHeader() const;
 
@@ -66,16 +65,19 @@ public:
     void executeOnBlock(size_t index, const Block & block);
     void executeOnBlockWithoutLock(size_t index, const Block & block);
 
-    void tryFlush(size_t index);
+    void tryFlush(size_t);
 
     void tryFlush();
 
     std::unique_ptr<IBlockInputStream> merge();
 
-    // total_src_rows, total_src_bytes
-    std::pair<size_t, size_t> mergeSrcRowsAndBytes() const;
-
     bool isTwoLevel() const;
+
+    void initForMerge();
+
+    Block readForMerge();
+
+    Block getHeaderForMerge();
 
 public:
     const FileProviderPtr file_provider;
@@ -83,7 +85,6 @@ public:
     const bool is_final;
 
     size_t max_threads;
-    const size_t temporary_data_merge_threads;
 
     bool inited = false;
 
@@ -93,10 +94,11 @@ private:
     std::unique_ptr<Aggregator> aggregator;
 
     std::vector<ThreadData> threads_data;
-    std::unique_ptr<std::vector<std::mutex>> mutexs;
+    std::unique_ptr<std::vector<std::shared_mutex>> mutexes;
     ManyAggregatedDataVariants many_data;
 
-    std::vector<std::unique_ptr<TemporaryFileStream>> temporary_inputs;
+    // for read
+    std::unique_ptr<IBlockInputStream> impl;
 };
 
 using AggregateStorePtr = std::shared_ptr<AggregateStore>;

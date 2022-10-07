@@ -40,9 +40,4 @@ void TaskScheduler::submit(std::vector<PipelineTask> & tasks)
         return;
     event_loop_pool->submit(tasks);
 }
-
-size_t TaskScheduler::concurrency() const
-{
-    return event_loop_pool->concurrency();
-}
 } // namespace DB

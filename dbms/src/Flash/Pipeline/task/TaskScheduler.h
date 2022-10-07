@@ -36,8 +36,6 @@ public:
 
     void cancel(UInt32 pipeline_id);
 
-    size_t concurrency() const;
-
 private:
     EventLoopPoolPtr event_loop_pool;
 

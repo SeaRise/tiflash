@@ -34,13 +34,16 @@ public:
     void submit(PipelineTask && task);
     ~EventLoop();
 private:
-    void handleCpuModeTask(PipelineTask && task);
-    void cpuModeLoop();
+    void handleCpuModeTask(PipelineTask && task) noexcept;
+    void cpuModeLoop() noexcept;
+    bool popTask(PipelineTask & task);
+    bool isStop();
 private:
     size_t loop_id;
     EventLoopPool & pool;
     MPMCQueue<PipelineTask> cpu_event_queue{199999};
     std::thread cpu_thread;
+    std::atomic_bool stop{false};
     LoggerPtr logger = Logger::get(fmt::format("event loop {}", loop_id));
 };
 using EventLoopPtr = std::unique_ptr<EventLoop>;
@@ -65,11 +68,9 @@ private:
     void submitCPU(PipelineTask && task);
     void submitIO(PipelineTask && task);
 
-    void handleCpuModeTask(PipelineTask && task);
-    void handleIOModeTask(PipelineTask && task);
+    void handleIOModeTask(PipelineTask && task) noexcept;
 
-    void cpuModeLoop();
-    void ioModeLoop();
+    void ioModeLoop() noexcept;
 
     void handleFinishTask(const PipelineTask & task);
     void handleErrTask(const PipelineTask & task, const PipelineTaskResult & result);

@@ -152,7 +152,7 @@ void DAGScheduler::handlePipelineSubmit(const PipelineEvent & event)
     assert(event.type == PipelineEventType::submit && event.pipeline);
     const auto & pipeline = event.pipeline;
     LOG_TRACE(log, "submit pipeline {}", pipeline->toString());
-    auto tasks = pipeline->transform(context, task_scheduler.concurrency());
+    auto tasks = pipeline->transform(context, context.getMaxStreams());
     task_scheduler.submit(tasks);
 }
 

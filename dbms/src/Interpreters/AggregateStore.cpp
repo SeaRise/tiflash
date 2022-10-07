@@ -114,40 +114,8 @@ void AggregateStore::tryFlush()
 
 std::unique_ptr<IBlockInputStream> AggregateStore::merge()
 {
-    if (!aggregator->hasTemporaryFiles())
-    {
-        /** If all partially-aggregated data is in RAM, then merge them in parallel, also in RAM.
-                */
-        return aggregator->mergeAndConvertToBlocks(many_data, is_final, max_threads);
-    }
-    else
-    {
-        /** If there are temporary files with partially-aggregated data on the disk,
-                *  then read and merge them, spending the minimum amount of memory.
-                */
-        const auto & files = aggregator->getTemporaryFiles();
-        BlockInputStreams input_streams;
-        for (const auto & file : files.files)
-        {
-            temporary_inputs.emplace_back(std::make_unique<TemporaryFileStream>(file->path(), file_provider));
-            input_streams.emplace_back(temporary_inputs.back()->block_in);
-        }
-
-        LOG_TRACE(
-            log,
-            "Will merge {} temporary files of size {:.2f} MiB compressed, {:.2f} MiB uncompressed.",
-            files.files.size(),
-            (files.sum_size_compressed / 1048576.0),
-            (files.sum_size_uncompressed / 1048576.0));
-
-        return std::make_unique<MergingAggregatedMemoryEfficientBlockInputStream>(
-            input_streams,
-            aggregator->getParams(),
-            is_final,
-            temporary_data_merge_threads,
-            temporary_data_merge_threads,
-            log->identifier());
-    }
+    RUNTIME_ASSERT(!aggregator->hasTemporaryFiles());
+    return aggregator->mergeAndConvertToBlocks(many_data, is_final, max_threads, true);
 }
 
 std::pair<size_t, size_t> AggregateStore::mergeSrcRowsAndBytes() const
@@ -160,5 +128,11 @@ std::pair<size_t, size_t> AggregateStore::mergeSrcRowsAndBytes() const
         total_src_bytes += thread_data.src_bytes;
     }
     return {total_src_rows, total_src_bytes};
+}
+
+bool AggregateStore::isTwoLevel() const
+{
+    assert(!many_data.empty());
+    return many_data[0]->isTwoLevel();
 }
 } // namespace DB

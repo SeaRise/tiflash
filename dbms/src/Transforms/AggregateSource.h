@@ -29,7 +29,7 @@ public:
 
     std::pair<bool, Block> read() override
     {
-        return final_agg_reader->tryRead();
+        return {true, final_agg_reader->read()};
     }
 
     Block getHeader() const override

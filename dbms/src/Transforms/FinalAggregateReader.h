@@ -37,27 +37,15 @@ public:
         return impl->getHeader();
     }
 
-    std::pair<bool, Block> tryRead()
-    {
-        assert(impl);
-        TryLock lock(mu);
-        if (lock.isLocked())
-            return {true, impl->read()};
-        else
-            return {false, {}};
-    }
-
     Block read()
     {
         assert(impl);
-        std::lock_guard<std::mutex> lock(mu);
         return impl->read();
     }
 
 private:
     AggregateStorePtr agg_store;
     std::unique_ptr<IBlockInputStream> impl;
-    std::mutex mu;
 };
 
 using FinalAggregateReaderPtr = std::shared_ptr<FinalAggregateReader>;

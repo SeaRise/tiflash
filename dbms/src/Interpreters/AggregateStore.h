@@ -75,6 +75,8 @@ public:
     // total_src_rows, total_src_bytes
     std::pair<size_t, size_t> mergeSrcRowsAndBytes() const;
 
+    bool isTwoLevel() const;
+
 public:
     const FileProviderPtr file_provider;
 

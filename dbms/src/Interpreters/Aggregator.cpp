@@ -1485,12 +1485,18 @@ public:
     /** The input is a set of non-empty sets of partially aggregated data,
       *  which are all either single-level, or are two-level.
       */
-    MergingAndConvertingBlockInputStream(const Aggregator & aggregator_, ManyAggregatedDataVariants & data_, bool final_, size_t threads_)
+    MergingAndConvertingBlockInputStream(
+        const Aggregator & aggregator_, 
+        ManyAggregatedDataVariants & data_, 
+        bool final_, 
+        size_t threads_,
+        bool is_pipeline_ = false)
         : log(Logger::get("MergingAndConvertingBlockInputStream", aggregator_.log ? aggregator_.log->identifier() : ""))
         , aggregator(aggregator_)
         , data(data_)
         , final(final_)
         , threads(threads_)
+        , is_pipeline(is_pipeline_)
     {
         /// At least we need one arena in first data item per thread
         if (!data.empty() && threads > data[0]->aggregates_pools.size())
@@ -1498,6 +1504,25 @@ public:
             Arenas & first_pool = data[0]->aggregates_pools;
             for (size_t j = first_pool.size(); j < threads; ++j)
                 first_pool.emplace_back(std::make_shared<Arena>());
+        }
+
+        if (is_pipeline)
+        {
+            RUNTIME_ASSERT(!aggregator.params.overflow_row);
+            if (!data.empty())
+            {
+                is_two_level = data[0]->isTwoLevel();
+                if (is_two_level)
+                {
+                    if (!parallel_merge_data)
+                        parallel_merge_data = std::make_unique<ParallelMergeData>();
+                    if (current_bucket_num == -1)
+                    {
+                        current_bucket_num.fetch_add(1);
+                        RUNTIME_ASSERT(data[0]->type != AggregatedDataVariants::Type::without_key);
+                    }
+                }
+            }
         }
     }
 
@@ -1518,6 +1543,9 @@ public:
 protected:
     Block readImpl() override
     {
+        if (likely(is_pipeline))
+            return readWithoutThread();
+
         if (data.empty())
             return {};
 
@@ -1604,12 +1632,107 @@ protected:
         }
     }
 
+    Block readWithoutThread()
+    {
+        if (data.empty())
+            return {};
+
+        if (current_bucket_num >= NUM_BUCKETS)
+            return {};
+
+        FAIL_POINT_TRIGGER_EXCEPTION(FailPoints::random_aggregate_merge_failpoint);
+
+        if (!is_two_level)
+        {
+            return readSingleLevel();
+        }
+        else
+        {
+            return readTwoLevel();
+        }
+    }
+
+    // thread safe
+    Block readTwoLevel()
+    {
+        if (current_bucket_num >= NUM_BUCKETS)
+            return {};
+
+        Block res;
+        while (true)
+        {
+            int num = current_bucket_num.fetch_add(1);
+            if (num < NUM_BUCKETS)
+            {
+                // thread safe.
+                thread(num);
+
+                auto it = parallel_merge_data->ready_blocks.end();
+                {
+                    std::unique_lock lock(parallel_merge_data->mutex);
+                    it = parallel_merge_data->ready_blocks.find(num);
+                    RUNTIME_ASSERT(it != parallel_merge_data->ready_blocks.end());
+                }
+                if (it->second)
+                {
+                    res.swap(it->second);
+                    break;
+                }
+            }
+        }
+
+        return res;
+    }
+
+    // only call in one thread.
+    Block readSingleLevel()
+    {
+        AggregatedDataVariantsPtr & first = data[0];
+
+        if (current_bucket_num == -1)
+        {
+            ++current_bucket_num;
+
+            assert(!aggregator.params.overflow_row);
+            if (first->type == AggregatedDataVariants::Type::without_key)
+            {
+                aggregator.mergeWithoutKeyDataImpl(data);
+                return aggregator.prepareBlockAndFillWithoutKey(
+                    *first,
+                    final,
+                    first->type != AggregatedDataVariants::Type::without_key);
+            }
+        }
+
+        if (current_bucket_num > 0)
+            return {};
+
+        if (first->type == AggregatedDataVariants::Type::without_key)
+            return {};
+
+        ++current_bucket_num;
+
+#define M(NAME)                                                 \
+    else if (first->type == AggregatedDataVariants::Type::NAME) \
+        aggregator.mergeSingleLevelDataImpl<decltype(first->NAME)::element_type>(data);
+        if (false) // NOLINT
+        {
+        }
+        APPLY_FOR_VARIANTS_SINGLE_LEVEL(M)
+#undef M
+        else throw Exception("Unknown aggregated data variant.", ErrorCodes::UNKNOWN_AGGREGATED_DATA_VARIANT);
+
+        return aggregator.prepareBlockAndFillSingleLevel(*first, final);
+    }
+
 private:
     const LoggerPtr log;
     const Aggregator & aggregator;
     ManyAggregatedDataVariants data;
     bool final;
     size_t threads;
+    bool is_pipeline;
+    bool is_two_level = false;
 
     std::atomic<Int32> current_bucket_num = -1;
     std::atomic<Int32> max_scheduled_bucket_num = -1;
@@ -1622,6 +1745,8 @@ private:
         std::mutex mutex;
         std::condition_variable condvar;
         std::shared_ptr<ThreadPoolManager> thread_pool;
+
+        ParallelMergeData() {}
 
         explicit ParallelMergeData(size_t threads)
             : thread_pool(newThreadPoolManager(threads))
@@ -1682,7 +1807,8 @@ private:
 std::unique_ptr<IBlockInputStream> Aggregator::mergeAndConvertToBlocks(
     ManyAggregatedDataVariants & data_variants,
     bool final,
-    size_t max_threads) const
+    size_t max_threads,
+    bool is_pipeline) const
 {
     if (data_variants.empty())
         throw Exception("Empty data passed to Aggregator::mergeAndConvertToBlocks.", ErrorCodes::EMPTY_DATA_PASSED);
@@ -1739,7 +1865,7 @@ std::unique_ptr<IBlockInputStream> Aggregator::mergeAndConvertToBlocks(
                                        non_empty_data[i]->aggregates_pools.end());
     }
 
-    return std::make_unique<MergingAndConvertingBlockInputStream>(*this, non_empty_data, final, max_threads);
+    return std::make_unique<MergingAndConvertingBlockInputStream>(*this, non_empty_data, final, max_threads, is_pipeline);
 }
 
 

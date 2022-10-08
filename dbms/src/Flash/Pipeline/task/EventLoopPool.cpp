@@ -30,7 +30,6 @@ EventLoop::EventLoop(
     cpu_thread = std::thread(&EventLoop::cpuModeLoop, this);
 }
 
-
 void EventLoop::finish()
 {
     cpu_event_queue.finish();

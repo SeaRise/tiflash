@@ -80,7 +80,6 @@ private:
     MPMCQueue<PipelineTask> io_event_queue{199999};
     std::thread io_thread;
 
-    // MPMCQueue<PipelineTask> cpu_event_queue{199999};
     std::vector<EventLoopPtr> cpu_loops;
 
     boost::lockfree::queue<EventLoop *> idle_loops;

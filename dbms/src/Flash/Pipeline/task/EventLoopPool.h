@@ -25,6 +25,30 @@
 namespace DB
 {
 class EventLoopPool;
+
+class IOPoller
+{
+public:
+    explicit IOPoller(EventLoopPool & pool_);
+    void finish();
+    void submit(PipelineTask && task);
+    ~IOPoller();
+private:
+    void ioModeLoop() noexcept;
+private:
+    mutable std::mutex mutex;
+    std::condition_variable cond;
+
+    EventLoopPool & pool;
+
+    std::list<PipelineTask> blocked_tasks;
+    std::thread io_thread;
+
+    std::atomic<bool> is_shutdown;
+
+    LoggerPtr logger = Logger::get("IOPoller");
+};
+
 class EventLoop
 {
 public:
@@ -42,7 +66,6 @@ private:
 private:
     size_t loop_id;
     EventLoopPool & pool;
-    MPMCQueue<PipelineTask> cpu_event_queue{199999};
     std::thread cpu_thread;
     LoggerPtr logger = Logger::get(fmt::format("event loop {}", loop_id));
 };
@@ -66,27 +89,27 @@ public:
 
 private:
     void submitCPU(PipelineTask && task);
+    void batchSubmitCPU(std::vector<PipelineTask> & tasks);
     void submitIO(PipelineTask && task);
-
-    void handleIOModeTask(PipelineTask && task) noexcept;
-
-    void ioModeLoop() noexcept;
 
     void handleFinishTask(const PipelineTask & task);
     void handleErrTask(const PipelineTask & task, const PipelineTaskResult & result);
 private:
     PipelineManager & pipeline_manager;
 
-    MPMCQueue<PipelineTask> io_event_queue{199999};
-    std::thread io_thread;
+    IOPoller io_poller;
+
+    mutable std::mutex global_mutex;
+    std::condition_variable cv;
+    bool is_closed = false;
+    std::deque<PipelineTask> cpu_event_queue;
 
     std::vector<EventLoopPtr> cpu_loops;
-
-    boost::lockfree::queue<EventLoop *> idle_loops;
 
     LoggerPtr logger = Logger::get("event loop pool");
 
     friend class EventLoop;
+    friend class IOPoller;
 };
 using EventLoopPoolPtr = std::unique_ptr<EventLoopPool>;
 } // namespace DB

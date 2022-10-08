@@ -21,6 +21,99 @@
 
 namespace DB
 {
+IOPoller::IOPoller(EventLoopPool & pool_): pool(pool_)
+{
+    io_thread = std::thread(&IOPoller::ioModeLoop, this);
+}
+
+void IOPoller::finish()
+{
+    if (this->is_shutdown.load() == false) {
+        this->is_shutdown.store(true, std::memory_order_release);
+        cond.notify_one();
+    }
+}
+
+void IOPoller::submit(PipelineTask && task)
+{
+    std::unique_lock<std::mutex> lock(mutex);
+    blocked_tasks.emplace_back(std::move(task));
+    cond.notify_one();
+}
+
+IOPoller::~IOPoller()
+{
+    io_thread.join();
+    LOG_INFO(logger, "stop io event loop");
+}
+
+void IOPoller::ioModeLoop() noexcept
+{
+    std::list<PipelineTask> local_blocked_tasks;
+    int spin_count = 0;
+    std::vector<PipelineTask> ready_tasks;
+    while (!is_shutdown.load(std::memory_order_acquire))
+    {
+        {
+            std::unique_lock<std::mutex> lock(this->mutex);
+            local_blocked_tasks.splice(local_blocked_tasks.end(), blocked_tasks);
+            if (local_blocked_tasks.empty() && blocked_tasks.empty()) {
+                std::cv_status cv_status = std::cv_status::no_timeout;
+                while (!is_shutdown.load(std::memory_order_acquire) && this->blocked_tasks.empty()) {
+                    cv_status = cond.wait_for(lock, std::chrono::milliseconds(10));
+                }
+                if (cv_status == std::cv_status::timeout) {
+                    continue;
+                }
+                if (is_shutdown.load(std::memory_order_acquire)) {
+                    break;
+                }
+                local_blocked_tasks.splice(local_blocked_tasks.end(), blocked_tasks);
+            }
+        }
+
+        auto task_it = local_blocked_tasks.begin();
+        while (task_it != local_blocked_tasks.end()) {
+            auto & task = *task_it;
+
+            auto pre_status = task.status;
+            if (task.tryToCpuMode())
+            {
+                if (pre_status == PipelineTaskStatus::io_wait)
+                    ready_tasks.emplace_back(std::move(task));
+                else
+                    pool.handleFinishTask(task);
+                task_it = local_blocked_tasks.erase(task_it);
+            }
+            else
+            {
+                ++task_it;
+            }
+        }
+
+        if (ready_tasks.empty()) {
+            spin_count += 1;
+        } else {
+            spin_count = 0;
+            pool.batchSubmitCPU(ready_tasks);
+            ready_tasks.clear();
+        }
+
+        if (spin_count != 0 && spin_count % 64 == 0) {
+#ifdef __x86_64__
+            _mm_pause();
+#else
+            // TODO: Maybe there's a better intrinsic like _mm_pause on non-x86_64 architecture.
+            sched_yield();
+#endif
+        }
+        if (spin_count == 640) {
+            spin_count = 0;
+            sched_yield();
+        }
+    }
+}
+
 EventLoop::EventLoop(
     size_t loop_id_,
     EventLoopPool & pool_)
@@ -30,25 +123,16 @@ EventLoop::EventLoop(
     cpu_thread = std::thread(&EventLoop::cpuModeLoop, this);
 }
 
-void EventLoop::finish()
-{
-    cpu_event_queue.finish();
-}
+void EventLoop::finish() {}
 
 void EventLoop::submitSelf(PipelineTask && task)
 {
-    EventLoop * loop = nullptr;
-    if (pool.idle_loops.pop(loop))
-        loop->submit(std::move(task));
-    else
-        submit(std::move(task));
+    submit(std::move(task));
 }
 
 void EventLoop::submit(PipelineTask && task)
 {
-    RUNTIME_ASSERT(
-        cpu_event_queue.tryPush(std::move(task)) != MPMCQueueResult::FULL,
-        "EventLoop cpu event queue full");
+    pool.submitCPU(std::move(task));
 }
 
 EventLoop::~EventLoop()
@@ -59,9 +143,6 @@ EventLoop::~EventLoop()
 
 void EventLoop::handleCpuModeTask(PipelineTask && task) noexcept
 {
-#ifndef NDEBUG
-    LOG_TRACE(logger, "handle cpu mode task: {}", task.toString());
-#endif
     auto result = task.execute();
     switch (result.type)
     {
@@ -106,24 +187,33 @@ void EventLoop::cpuModeLoop() noexcept
 
 bool EventLoop::popTask(PipelineTask & task)
 {
-    auto first_try = cpu_event_queue.pop(task);
-    if (first_try == MPMCQueueResult::OK)
-        return true;
-    if (first_try == MPMCQueueResult::EMPTY)
-        pool.idle_loops.push(this);
-    return cpu_event_queue.pop(task) == MPMCQueueResult::OK;
+    {
+        std::unique_lock<std::mutex> lock(pool.global_mutex);
+        while (true)
+        {
+            if (unlikely(pool.is_closed))
+                return false;
+            if (!pool.cpu_event_queue.empty())
+                break;
+            pool.cv.wait(lock);
+        }
+
+        task = std::move(pool.cpu_event_queue.front());
+        pool.cpu_event_queue.pop_front();
+    }
+    return true;
 }
 
 EventLoopPool::EventLoopPool(
     size_t loop_num,
     PipelineManager & pipeline_manager_)
     : pipeline_manager(pipeline_manager_)
+    , io_poller(*this)
 {
     RUNTIME_ASSERT(loop_num > 0);
     cpu_loops.reserve(loop_num);
     for (size_t i = 0; i < loop_num; ++i)
         cpu_loops.emplace_back(std::make_unique<EventLoop>(i, *this));
-    io_thread = std::thread(&EventLoopPool::ioModeLoop, this);
 }
 
 void EventLoopPool::submit(std::vector<PipelineTask> & tasks)
@@ -140,42 +230,41 @@ void EventLoopPool::submit(std::vector<PipelineTask> & tasks)
 
 void EventLoopPool::submitCPU(PipelineTask && task)
 {
-    EventLoop * loop = nullptr;
-    if (idle_loops.pop(loop))
+    std::lock_guard<std::mutex> lock(global_mutex);
+    cpu_event_queue.emplace_back(std::move(task));
+    cv.notify_one();
+}
+
+void EventLoopPool::batchSubmitCPU(std::vector<PipelineTask> & tasks)
+{
+    std::lock_guard<std::mutex> lock(global_mutex);
+    for (auto & task : tasks)
     {
-        loop->submit(std::move(task));
-    }
-    else
-    {
-        thread_local size_t i = 0;
-        thread_local auto next_loop = [&]() -> EventLoop & {
-            auto & loop = *cpu_loops[i++];
-            if (i == cpu_loops.size())
-                i = 0;
-            return loop;
-        };
-        next_loop().submit(std::move(task));
+        cpu_event_queue.emplace_back(std::move(task));
+        cv.notify_one();
     }
 }
 
 void EventLoopPool::submitIO(PipelineTask && task)
 {
-    RUNTIME_ASSERT(
-        io_event_queue.tryPush(std::move(task)) != MPMCQueueResult::FULL,
-        "EventLoopPool io event queue full");
+    io_poller.submit(std::move(task));
 }
 
 void EventLoopPool::finish()
 {
+    {
+        std::lock_guard<std::mutex> lock(global_mutex);
+        is_closed = true;
+        cv.notify_all();
+    }
     for (auto & cpu_loop : cpu_loops)
         cpu_loop->finish();
-    io_event_queue.finish();
+    io_poller.finish();
 }
 
 EventLoopPool::~EventLoopPool()
 {
     cpu_loops.clear();
-    io_thread.join();
     LOG_INFO(logger, "stop event loop pool");
 }
 
@@ -188,43 +277,5 @@ void EventLoopPool::handleErrTask(const PipelineTask & task, const PipelineTaskR
 {
     if (auto dag_scheduler = pipeline_manager.getDAGScheduler(task.mpp_task_id); likely(dag_scheduler))
         dag_scheduler->submit(PipelineEvent::fail(result.err_msg));
-}
-
-void EventLoopPool::handleIOModeTask(PipelineTask && task) noexcept
-{
-#ifndef NDEBUG
-    LOG_TRACE(logger, "handle io mode task: {}", task.toString());
-#endif
-    switch(task.status)
-    {
-    case PipelineTaskStatus::io_wait:
-    {
-        if (task.tryToCpuMode())
-            submitCPU(std::move(task));
-        else
-            submitIO(std::move(task));
-        break;
-    }
-    case PipelineTaskStatus::io_finish:
-    {
-        if (task.tryToCpuMode())
-            handleFinishTask(task);
-        else
-            submitIO(std::move(task));
-        break;
-    }
-    case PipelineTaskStatus::cpu_run:
-        // impossible.
-        submitCPU(std::move(task));
-        break;
-    }
-}
-
-void EventLoopPool::ioModeLoop() noexcept
-{
-    setThreadName("EventLoopPool");
-    PipelineTask task;
-    while (likely(io_event_queue.pop(task) == MPMCQueueResult::OK))
-        handleIOModeTask(std::move(task));
 }
 } // namespace DB

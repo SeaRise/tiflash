@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <Common/Stopwatch.h>
 #include <Common/Exception.h>
 #include <Common/MemoryTrackerSetter.h>
 #include <Flash/Pipeline/task/PipelineTask.h>
@@ -60,18 +61,29 @@ PipelineTaskResult PipelineTask::execute()
     {
         MemoryTrackerSetter setter(true, getMemTracker());
         assert(status == PipelineTaskStatus::cpu_run);
-        if (unlikely(!transforms->execute()))
+        int64_t time_spent = 0;
+        while (true)
         {
-            transforms->finish();
-            if (!transforms->isIOReady())
-                status = PipelineTaskStatus::io_finish;
-            return finish();
-        }
-        else
-        {
-            if (!transforms->isIOReady())
+            Stopwatch stopwatch {CLOCK_MONOTONIC_COARSE};
+            if (!transforms->execute())
+            {
+                transforms->finish();
+                if (!transforms->isIOReady())
+                    status = PipelineTaskStatus::io_finish;
+                return finish();
+            }
+            else if (!transforms->isIOReady())
+            {
                 status = PipelineTaskStatus::io_wait;
-            return running();
+                return running();
+            }
+            else
+            {
+                time_spent += stopwatch.elapsed();
+                static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
+                if (time_spent >= YIELD_MAX_TIME_SPENT)
+                    return running();
+            }
         }
     }
     catch (...)

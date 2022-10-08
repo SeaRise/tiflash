@@ -23,7 +23,6 @@ TaskScheduler::TaskScheduler(
     PipelineManager & pipeline_manager, 
     const ServerInfo & server_info)
     : event_loop_pool(std::make_unique<EventLoopPool>(
-        // server_info.cpu_info.logical_cores, 
         server_info.cpu_info.physical_cores, 
         pipeline_manager))
 {}

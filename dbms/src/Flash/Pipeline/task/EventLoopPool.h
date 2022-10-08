@@ -17,6 +17,7 @@
 #include <Common/Logger.h>
 #include <Common/MPMCQueue.h>
 #include <Flash/Pipeline/task/PipelineTask.h>
+#include <boost_wrapper/lockfree_queue.h>
 
 #include <memory>
 #include <thread>
@@ -31,19 +32,18 @@ public:
         size_t loop_id_,
         EventLoopPool & pool_);
     void finish();
+    void submitSelf(PipelineTask && task);
     void submit(PipelineTask && task);
     ~EventLoop();
 private:
     void handleCpuModeTask(PipelineTask && task) noexcept;
     void cpuModeLoop() noexcept;
     bool popTask(PipelineTask & task);
-    bool isStop();
 private:
     size_t loop_id;
     EventLoopPool & pool;
     MPMCQueue<PipelineTask> cpu_event_queue{199999};
     std::thread cpu_thread;
-    std::atomic_bool stop{false};
     LoggerPtr logger = Logger::get(fmt::format("event loop {}", loop_id));
 };
 using EventLoopPtr = std::unique_ptr<EventLoop>;
@@ -80,7 +80,10 @@ private:
     MPMCQueue<PipelineTask> io_event_queue{199999};
     std::thread io_thread;
 
+    // MPMCQueue<PipelineTask> cpu_event_queue{199999};
     std::vector<EventLoopPtr> cpu_loops;
+
+    boost::lockfree::queue<EventLoop *> idle_loops;
 
     LoggerPtr logger = Logger::get("event loop pool");
 

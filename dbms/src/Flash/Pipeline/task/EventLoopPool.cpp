@@ -33,8 +33,16 @@ EventLoop::EventLoop(
 
 void EventLoop::finish()
 {
-    stop.store(true, std::memory_order_relaxed);
     cpu_event_queue.finish();
+}
+
+void EventLoop::submitSelf(PipelineTask && task)
+{
+    EventLoop * loop = nullptr;
+    if (pool.idle_loops.pop(loop))
+        loop->submit(std::move(task));
+    else
+        submit(std::move(task));
 }
 
 void EventLoop::submit(PipelineTask && task)
@@ -82,45 +90,28 @@ void EventLoop::handleCpuModeTask(PipelineTask && task) noexcept
     }
 }
 
-bool EventLoop::isStop()
-{
-    return stop.load(std::memory_order_relaxed);
-}
-
 void EventLoop::cpuModeLoop() noexcept
 {
+#ifdef __linux__
+    struct sched_param param;
+    param.__sched_priority = sched_get_priority_max(sched_getscheduler(0));
+    sched_setparam(0, &param);
+#endif
     setThreadName("EventLoop");
     PipelineTask task;
-    while (likely(!isStop()))
+    while (likely(popTask(task)))
     {
-        if (likely(popTask(task)))
-            handleCpuModeTask(std::move(task));
+        handleCpuModeTask(std::move(task));
     }
-    
 }
 
 bool EventLoop::popTask(PipelineTask & task)
 {
-    // static constexpr auto timeout = std::chrono::milliseconds(5);
-    // if (cpu_event_queue.popTimeout(task, timeout) == MPMCQueueResult::OK)
-    //     return true;
-    // else
-    // {
-    //     // steal
-    //     size_t next_id = loop_id;
-    //     auto next_loop_id = [&]() {
-    //         ++next_id;
-    //         if (next_id == pool.cpu_loops.size())
-    //             next_id = 0;
-    //     };
-    //     next_loop_id();
-    //     while (next_id != loop_id)
-    //     {
-    //         if (pool.cpu_loops[next_id]->cpu_event_queue.popTimeout(task, timeout) == MPMCQueueResult::OK)
-    //             return true;
-    //         next_loop_id();
-    //     }
-    // }
+    auto first_try = cpu_event_queue.pop(task);
+    if (first_try == MPMCQueueResult::OK)
+        return true;
+    if (first_try == MPMCQueueResult::EMPTY)
+        pool.idle_loops.push(this);
     return cpu_event_queue.pop(task) == MPMCQueueResult::OK;
 }
 
@@ -150,14 +141,22 @@ void EventLoopPool::submit(std::vector<PipelineTask> & tasks)
 
 void EventLoopPool::submitCPU(PipelineTask && task)
 {
-    thread_local size_t i = 0;
-    thread_local auto next_loop = [&]() -> EventLoop & {
-        auto & loop = *cpu_loops[i++];
-        if (i == cpu_loops.size())
-            i = 0;
-        return loop;
-    };
-    next_loop().submit(std::move(task));
+    EventLoop * loop = nullptr;
+    if (idle_loops.pop(loop))
+    {
+        loop->submit(std::move(task));
+    }
+    else
+    {
+        thread_local size_t i = 0;
+        thread_local auto next_loop = [&]() -> EventLoop & {
+            auto & loop = *cpu_loops[i++];
+            if (i == cpu_loops.size())
+                i = 0;
+            return loop;
+        };
+        next_loop().submit(std::move(task));
+    }
 }
 
 void EventLoopPool::submitIO(PipelineTask && task)
@@ -216,7 +215,9 @@ void EventLoopPool::handleIOModeTask(PipelineTask && task) noexcept
         break;
     }
     case PipelineTaskStatus::cpu_run:
+        // impossible.
         submitCPU(std::move(task));
+        break;
     }
 }
 
@@ -225,8 +226,6 @@ void EventLoopPool::ioModeLoop() noexcept
     setThreadName("EventLoopPool");
     PipelineTask task;
     while (likely(io_event_queue.pop(task) == MPMCQueueResult::OK))
-    {
         handleIOModeTask(std::move(task));
-    }
 }
 } // namespace DB

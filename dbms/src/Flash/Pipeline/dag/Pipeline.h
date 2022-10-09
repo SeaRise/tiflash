@@ -33,22 +33,22 @@ public:
         const std::unordered_set<UInt32> & parent_ids_,
         const String & req_id);
 
-    std::vector<PipelineTask> transform(Context & context, size_t concurrency);
+    std::vector<PipelineTask> transform(
+        Context & context, 
+        size_t concurrency, 
+        bool is_final,
+        const std::vector<PipelineFinishCounterPtr> & depends);
 
     UInt32 getId() const { return id; }
     const std::unordered_set<UInt32> & getParentIds() const { return parent_ids; }
 
     void cancel(bool is_kill);
-    void finish();
-
-    void finish(size_t task_id);
 
     PhysicalPlanNodePtr getPlanNode() const { return plan_node; }
 
     String toString() const;
 
-public:
-    size_t active_task_num = 0;
+    size_t taskNum() const;
 
 private:
     PhysicalPlanNodePtr plan_node;

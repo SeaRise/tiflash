@@ -34,6 +34,7 @@
 #include <Interpreters/Aggregator.h>
 #include <Storages/Transaction/CollatorUtils.h>
 #include <common/demangle.h>
+#include <Transforms/TryLock.h>
 
 #include <future>
 #include <iomanip>
@@ -1679,9 +1680,14 @@ protected:
         return res;
     }
 
-    // only call in one thread.
     Block readSingleLevel()
     {
+        // for readSingleLevel, only exeucted by one thread.
+        // so try lock fail return {}
+        TryLock lock(singe_level_mutex);
+        if (!lock.isLocked())
+            return {};
+
         AggregatedDataVariantsPtr & first = data[0];
 
         if (current_bucket_num == -1)
@@ -1728,6 +1734,7 @@ private:
     size_t threads;
     bool is_pipeline;
     bool is_two_level = false;
+    std::mutex singe_level_mutex;
 
     std::atomic<Int32> current_bucket_num = -1;
     std::atomic<Int32> max_scheduled_bucket_num = -1;

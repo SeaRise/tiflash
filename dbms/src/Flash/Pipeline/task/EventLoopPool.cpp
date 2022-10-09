@@ -24,10 +24,12 @@ namespace DB
 IOPoller::IOPoller(EventLoopPool & pool_): pool(pool_)
 {
     io_thread = std::thread(&IOPoller::ioModeLoop, this);
+
 }
 
 void IOPoller::finish()
 {
+    LOG_DEBUG(logger, "call finish for IOPoller");
     if (this->is_shutdown.load() == false) {
         this->is_shutdown.store(true, std::memory_order_release);
         cond.notify_one();
@@ -49,11 +51,16 @@ IOPoller::~IOPoller()
 
 void IOPoller::ioModeLoop() noexcept
 {
+    LOG_DEBUG(logger, "start io mode loop");
+
     std::list<PipelineTask> local_blocked_tasks;
     int spin_count = 0;
     std::vector<PipelineTask> ready_tasks;
     while (!is_shutdown.load(std::memory_order_acquire))
     {
+#ifndef NDEBUG
+        LOG_TRACE(logger, "getting io task from blocked_tasks");
+#endif
         {
             std::unique_lock<std::mutex> lock(this->mutex);
             local_blocked_tasks.splice(local_blocked_tasks.end(), blocked_tasks);
@@ -76,13 +83,14 @@ void IOPoller::ioModeLoop() noexcept
         while (task_it != local_blocked_tasks.end()) {
             auto & task = *task_it;
 
+#ifndef NDEBUG
+        LOG_TRACE(logger, "handle io mode task: {}", task.toString());
+#endif
             auto pre_status = task.status;
-            if (task.tryToCpuMode())
+            if (task.tryToCpuMode(pool.pipeline_manager))
             {
                 if (pre_status == PipelineTaskStatus::io_wait)
                     ready_tasks.emplace_back(std::move(task));
-                else
-                    pool.handleFinishTask(task);
                 task_it = local_blocked_tasks.erase(task_it);
             }
             else
@@ -112,6 +120,7 @@ void IOPoller::ioModeLoop() noexcept
             sched_yield();
         }
     }
+    LOG_DEBUG(logger, "finish io mode loop");
 }
 
 EventLoop::EventLoop(
@@ -124,11 +133,6 @@ EventLoop::EventLoop(
 }
 
 void EventLoop::finish() {}
-
-void EventLoop::submitSelf(PipelineTask && task)
-{
-    submit(std::move(task));
-}
 
 void EventLoop::submit(PipelineTask && task)
 {
@@ -143,12 +147,15 @@ EventLoop::~EventLoop()
 
 void EventLoop::handleCpuModeTask(PipelineTask && task) noexcept
 {
-    auto result = task.execute();
+#ifndef NDEBUG
+    LOG_TRACE(logger, "handle cpu mode task: {}", task.toString());
+#endif
+    auto result = task.execute(pool.pipeline_manager);
     switch (result.type)
     {
     case PipelineTaskResultType::running:
     {
-        if (task.status == PipelineTaskStatus::io_wait)
+        if (task.status == PipelineTaskStatus::io_wait || task.status == PipelineTaskStatus::io_finishing)
             pool.submitIO(std::move(task));
         else
             submit(std::move(task));
@@ -156,10 +163,6 @@ void EventLoop::handleCpuModeTask(PipelineTask && task) noexcept
     }
     case PipelineTaskResultType::finished:
     {
-        if (task.status == PipelineTaskStatus::io_finish)
-            pool.submitIO(std::move(task));
-        else
-            pool.handleFinishTask(task);
         break;
     }
     case PipelineTaskResultType::error:
@@ -222,9 +225,19 @@ void EventLoopPool::submit(std::vector<PipelineTask> & tasks)
     {
         task.prepare();
         if (task.tryToIOMode())
+        {
+#ifndef NDEBUG
+            LOG_TRACE(logger, "submit {} task to io loop", task.toString());
+#endif
             submitIO(std::move(task));
+        } 
         else
+        {
+#ifndef NDEBUG
+            LOG_TRACE(logger, "submit {} task to cpu loop", task.toString());
+#endif
             submitCPU(std::move(task));
+        }
     }
 }
 
@@ -268,11 +281,6 @@ EventLoopPool::~EventLoopPool()
     LOG_INFO(logger, "stop event loop pool");
 }
 
-void EventLoopPool::handleFinishTask(const PipelineTask & task)
-{
-    if (auto dag_scheduler = pipeline_manager.getDAGScheduler(task.mpp_task_id); likely(dag_scheduler))
-        dag_scheduler->submit(PipelineEvent::finish(task.task_id, task.pipeline_id));
-}
 void EventLoopPool::handleErrTask(const PipelineTask & task, const PipelineTaskResult & result)
 {
     if (auto dag_scheduler = pipeline_manager.getDAGScheduler(task.mpp_task_id); likely(dag_scheduler))

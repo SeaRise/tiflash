@@ -17,6 +17,7 @@
 #include <Common/MemoryTracker.h>
 #include <Flash/Mpp/MPPTaskId.h>
 #include <Transforms/Transforms.h>
+#include <Flash/Pipeline/task/PipelineFinishCounter.h>
 
 namespace DB
 {
@@ -26,7 +27,7 @@ enum class PipelineTaskStatus
     cpu_run,
     // io mode
     io_wait,
-    io_finish,
+    io_finishing,
 };
 
 enum class PipelineTaskResultType
@@ -42,62 +43,73 @@ struct PipelineTaskResult
     String err_msg;
 };
 
+struct PipelineManager;
+
 class PipelineTask
 {
 public:
     PipelineTask() = default;
 
     PipelineTask(
-        UInt32 task_id_,
         UInt32 pipeline_id_,
         const MPPTaskId & mpp_task_id_,
-        const TransformsPtr & transforms_)
-        : task_id(task_id_)
-        , pipeline_id(pipeline_id_)
+        const TransformsPtr & transforms_,
+        bool is_final_task_,
+        const PipelineFinishCounterPtr & pipeline_finish_counter_,
+        const std::vector<PipelineFinishCounterPtr> & depends_)
+        : pipeline_id(pipeline_id_)
         , mpp_task_id(mpp_task_id_)
         , transforms(transforms_)
         , mem_tracker(current_memory_tracker ? current_memory_tracker->shared_from_this() : nullptr)
+        , is_final_task(is_final_task_)
+        , pipeline_finish_counter(pipeline_finish_counter_)
+        , depends(depends_)
     {}
 
     PipelineTask(PipelineTask && task)
-        : task_id(std::move(task.task_id))
-        , pipeline_id(std::move(task.pipeline_id))
+        : pipeline_id(std::move(task.pipeline_id))
         , mpp_task_id(std::move(task.mpp_task_id))
         , transforms(std::move(task.transforms))
         , status(std::move(task.status))
         , mem_tracker(std::move(task.mem_tracker))
+        , is_final_task(std::move(task.is_final_task))
+        , pipeline_finish_counter(std::move(task.pipeline_finish_counter))
+        , depends(std::move(task.depends))
     {}
 
     PipelineTask & operator=(PipelineTask && task)
     {
         if (this != &task)
         {
-            task_id = std::move(task.task_id);
             pipeline_id = std::move(task.pipeline_id);
             mpp_task_id = std::move(task.mpp_task_id);
             transforms = std::move(task.transforms);
             status = std::move(task.status);
             mem_tracker = std::move(task.mem_tracker);
+            is_final_task = std::move(task.is_final_task);
+            pipeline_finish_counter = std::move(task.pipeline_finish_counter);
+            depends = std::move(task.depends);
         }
         return *this;
     }
 
     void prepare();
 
-    PipelineTaskResult execute();
+    PipelineTaskResult execute(PipelineManager & pipeline_manager);
 
     MemoryTracker * getMemTracker()
     {
         return mem_tracker ? mem_tracker.get() : nullptr;
     }
 
-    bool tryToCpuMode();
+    bool tryToCpuMode(PipelineManager & pipeline_manager);
     bool tryToIOMode();
 
     String toString() const;
 
+    bool isDependsReady();
+
 public:
-    UInt32 task_id;
     UInt32 pipeline_id;
     MPPTaskId mpp_task_id;
     TransformsPtr transforms;
@@ -106,7 +118,14 @@ public:
 
     std::shared_ptr<MemoryTracker> mem_tracker;
 
+    bool is_final_task = false;
+
+    PipelineFinishCounterPtr pipeline_finish_counter;
+    std::vector<PipelineFinishCounterPtr> depends;
+
 private:
+    void doFinish(PipelineManager & pipeline_manager);
+
     static PipelineTaskResult finish();
     static PipelineTaskResult fail(const String & err_msg);
     static PipelineTaskResult running();

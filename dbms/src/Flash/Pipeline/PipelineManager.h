@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <Common/Logger.h>
 #include <Flash/Mpp/MPPTaskId.h>
 #include <Flash/Pipeline/task/TaskScheduler.h>
 #include <Server/ServerInfo.h>
@@ -39,6 +40,8 @@ struct PipelineManager
     std::shared_mutex rwlock;
     DAGSchedulerMap dag_scheduler_map;
     std::unique_ptr<TaskScheduler> task_scheduler;
+
+    LoggerPtr log;
 };
 
 using PipelineManagerPtr = std::unique_ptr<PipelineManager>;

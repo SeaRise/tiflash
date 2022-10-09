@@ -49,11 +49,7 @@ void PhysicalFinalAggregation::transformImpl(DAGPipeline & pipeline, Context & /
 
 void PhysicalFinalAggregation::transform(TransformsPipeline & pipeline, Context & /*context*/, size_t concurrency)
 {
-    aggregate_store->initForMerge();
-    size_t max_threads = aggregate_store->isTwoLevel()
-        ? std::min(concurrency, aggregate_store->max_threads)
-        : 1;
-    pipeline.init(max_threads);
+    pipeline.init(std::min(concurrency, aggregate_store->max_threads));
     pipeline.transform([&](auto & transforms) {
         transforms->setSource(std::make_shared<AggregateSource>(aggregate_store));
         transforms->append(std::make_shared<ExpressionTransform>(expr_after_agg));

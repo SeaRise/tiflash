@@ -44,14 +44,18 @@ public:
 
     std::pair<bool, Block> tryRead();
 
-    void initHeader(const Block & header_);
+    void init(const Block & header_, size_t concurrency);
 
     void initForRead();
 
     Block getHeader();
 
+    size_t getConcurrency() const;
+
 private:
     Block header;
+    size_t concurrency = 0;
+    size_t unfinished_task_num = 0;
 
     SortDescription description;
     String req_id;

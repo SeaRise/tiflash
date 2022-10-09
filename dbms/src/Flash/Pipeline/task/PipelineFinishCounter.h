@@ -14,36 +14,30 @@
 
 #pragma once
 
-#include <Interpreters/AggregateStore.h>
-#include <Transforms/Source.h>
+#include <atomic>
+#include <memory>
 
 namespace DB
 {
-class AggregateSource : public Source
+class PipelineFinishCounter
 {
 public:
-    explicit AggregateSource(
-        const AggregateStorePtr & agg_store_)
-        : agg_store(agg_store_)
-    {}
-
-    std::pair<bool, Block> read() override
+    explicit PipelineFinishCounter(int32_t init_num): counter(init_num) {}
+   
+    // return non-finished task count
+    int32_t finish()
     {
-        return {true, agg_store->readForMerge()};
+        return counter.fetch_sub(1) - 1;
     }
 
-    Block getHeader() const override
+    bool isFinished()
     {
-        return agg_store->getHeaderForMerge();
+        return 0 == counter;
     }
-
-    bool isIOReady() override
-    {
-        agg_store->initForMerge();
-        return true; 
-    };
 
 private:
-    AggregateStorePtr agg_store;
+    std::atomic_int32_t counter;
 };
+
+using PipelineFinishCounterPtr = std::shared_ptr<PipelineFinishCounter>;
 } // namespace DB

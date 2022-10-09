@@ -19,6 +19,7 @@ namespace DB
 {
 PipelineManager::PipelineManager(const ServerInfo & server_info)
     : task_scheduler(std::make_unique<TaskScheduler>(*this, server_info))
+    , log(Logger::get("PipelineManager"))
 {}
 
 DAGSchedulerPtr PipelineManager::getDAGScheduler(const MPPTaskId & mpp_task_id)

@@ -44,7 +44,7 @@ private:
     std::list<PipelineTask> blocked_tasks;
     std::thread io_thread;
 
-    std::atomic<bool> is_shutdown;
+    std::atomic<bool> is_shutdown{false};
 
     LoggerPtr logger = Logger::get("IOPoller");
 };
@@ -56,7 +56,6 @@ public:
         size_t loop_id_,
         EventLoopPool & pool_);
     void finish();
-    void submitSelf(PipelineTask && task);
     void submit(PipelineTask && task);
     ~EventLoop();
 private:
@@ -92,7 +91,6 @@ private:
     void batchSubmitCPU(std::vector<PipelineTask> & tasks);
     void submitIO(PipelineTask && task);
 
-    void handleFinishTask(const PipelineTask & task);
     void handleErrTask(const PipelineTask & task, const PipelineTaskResult & result);
 private:
     PipelineManager & pipeline_manager;

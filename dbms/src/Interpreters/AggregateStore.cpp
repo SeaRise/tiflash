@@ -115,11 +115,15 @@ bool AggregateStore::isTwoLevel() const
     return many_data[0]->isTwoLevel();
 }
 
+// maybe call twice.
 void AggregateStore::initForMerge()
 {
-    MergeLock lock(*mutexes);
+    assert(!mutexes->empty());
+    std::unique_lock lock((*mutexes)[0]);
+    // MergeLock lock(*mutexes);
     RUNTIME_ASSERT(!aggregator->hasTemporaryFiles());
-    impl = aggregator->mergeAndConvertToBlocks(many_data, is_final, max_threads, true);
+    if (!impl)
+        impl = aggregator->mergeAndConvertToBlocks(many_data, is_final, max_threads, true);
 }
 
 Block AggregateStore::readForMerge()

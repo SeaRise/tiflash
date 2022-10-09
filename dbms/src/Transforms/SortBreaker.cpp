@@ -21,58 +21,64 @@ void SortBreaker::add(Blocks && local_blocks)
 {
     std::lock_guard<std::mutex> lock(mu);
     multi_local_blocks.emplace_back(std::move(local_blocks));
+    --unfinished_task_num;
+    if (0 == unfinished_task_num)
+    {
+        size_t reverse_size = 0;
+        for (const auto & local_blocks : multi_local_blocks)
+            reverse_size += local_blocks.size();
+        blocks.reserve(reverse_size);
+        for (auto & local_blocks : multi_local_blocks)
+        {
+            for (auto & local_block : local_blocks)
+                blocks.emplace_back(std::move(local_block));
+        }
+        assert(header.rows() == 0);
+        if (blocks.empty())
+            blocks.push_back(header);
+        // don't need to call readPrefix/readSuffix for MergeSortingBlocksBlockInputStream.
+        impl = std::make_unique<MergeSortingBlocksBlockInputStream>(
+            blocks,
+            description,
+            req_id,
+            max_merged_block_size,
+            limit);
+    }
 }
 
-void SortBreaker::initHeader(const Block & header_)
+void SortBreaker::init(const Block & header_, size_t concurrency_)
 {
-    assert(!header);
-    header = header_.cloneEmpty();
+    // for non-joined, SortBreaker::init maybe call twice.
+    if (!header)
+        header = header_.cloneEmpty();
+    unfinished_task_num += concurrency_;
+    concurrency = std::max(concurrency, concurrency_);
+}
+
+size_t SortBreaker::getConcurrency() const
+{
+    return concurrency;
 }
 
 Block SortBreaker::read()
 {
-    assert(impl);
     std::lock_guard<std::mutex> lock(mu);
+    assert(impl);
     return impl->read();
 }
 
 std::pair<bool, Block> SortBreaker::tryRead()
 {
-    assert(impl);
     TryLock lock(mu);
+    assert(impl);
     if (lock.isLocked())
         return {true, impl->read()};
     else
         return {false, {}};
 }
 
-void SortBreaker::initForRead()
-{
-    std::lock_guard<std::mutex> lock(mu);
-    size_t reverse_size = 0;
-    for (const auto & local_blocks : multi_local_blocks)
-        reverse_size += local_blocks.size();
-    blocks.reserve(reverse_size);
-    for (auto & local_blocks : multi_local_blocks)
-    {
-        for (auto & local_block : local_blocks)
-            blocks.emplace_back(std::move(local_block));
-    }
-    assert(header.rows() == 0);
-    if (blocks.empty())
-        blocks.push_back(header);
-    // don't need to call readPrefix/readSuffix for MergeSortingBlocksBlockInputStream.
-    impl = std::make_unique<MergeSortingBlocksBlockInputStream>(
-        blocks,
-        description,
-        req_id,
-        max_merged_block_size,
-        limit);
-}
-
 Block SortBreaker::getHeader()
 {
-    assert(impl);
-    return impl->getHeader();
+    return header;
 }
 } // namespace DB

@@ -16,21 +16,26 @@
 #include <Common/Exception.h>
 #include <Common/MemoryTrackerSetter.h>
 #include <Flash/Pipeline/task/PipelineTask.h>
+#include <Flash/Pipeline/PipelineManager.h>
+#include <Flash/Pipeline/dag/DAGScheduler.h>
+#include <Flash/Pipeline/dag/Event.h>
 
 namespace DB
 {
 String PipelineTask::toString() const
 {
-    return fmt::format("{{task_id: {}, pipeline_id: {}, mpp_task_id: {}}}", task_id, pipeline_id, mpp_task_id.toString());
+    return fmt::format("{{pipeline_id: {}, mpp_task_id: {}}}", pipeline_id, mpp_task_id.toString());
 }
 
 // must in io mode.
-bool PipelineTask::tryToCpuMode()
+bool PipelineTask::tryToCpuMode(PipelineManager & pipeline_manager)
 {
     MemoryTrackerSetter setter(true, getMemTracker());
-    assert(status == PipelineTaskStatus::io_wait || status == PipelineTaskStatus::io_finish);
-    if (transforms->isIOReady())
+    assert(status == PipelineTaskStatus::io_wait || status == PipelineTaskStatus::io_finishing);
+    if (isDependsReady() && transforms->isIOReady())
     {
+        if (status == PipelineTaskStatus::io_finishing)
+            doFinish(pipeline_manager);
         status = PipelineTaskStatus::cpu_run;
         return true;
     }
@@ -41,7 +46,7 @@ bool PipelineTask::tryToIOMode()
 {
     MemoryTrackerSetter setter(true, getMemTracker());
     assert(status == PipelineTaskStatus::cpu_run);
-    if (!transforms->isIOReady())
+    if (!isDependsReady() || !transforms->isIOReady())
     {
         status = PipelineTaskStatus::io_wait;
         return true;
@@ -54,8 +59,18 @@ void PipelineTask::prepare()
     transforms->prepare();
 }
 
+bool PipelineTask::isDependsReady()
+{
+    for (auto & depend : depends)
+    {
+        if (!depend->isFinished())
+            return false;
+    }
+    return true;
+}
+
 // must in cpu mode.
-PipelineTaskResult PipelineTask::execute()
+PipelineTaskResult PipelineTask::execute(PipelineManager & pipeline_manager)
 {
     try
     {
@@ -64,12 +79,17 @@ PipelineTaskResult PipelineTask::execute()
         int64_t time_spent = 0;
         while (true)
         {
+            // isDependsReady() must be true here.
             Stopwatch stopwatch {CLOCK_MONOTONIC_COARSE};
             if (!transforms->execute())
             {
                 transforms->finish();
                 if (!transforms->isIOReady())
-                    status = PipelineTaskStatus::io_finish;
+                {
+                    status = PipelineTaskStatus::io_finishing;
+                    return running();
+                }
+                doFinish(pipeline_manager);
                 return finish();
             }
             else if (!transforms->isIOReady())
@@ -89,6 +109,29 @@ PipelineTaskResult PipelineTask::execute()
     catch (...)
     {
         return fail(getCurrentExceptionMessage(true));
+    }
+}
+
+void PipelineTask::doFinish(PipelineManager & pipeline_manager)
+{
+    assert(pipeline_finish_counter);
+#ifndef NDEBUG
+    LOG_TRACE(pipeline_manager.log, "task {} finish", toString());
+#endif
+    if (0 == pipeline_finish_counter->finish())
+    {
+        assert(pipeline_finish_counter->isFinished());
+#ifndef NDEBUG
+        LOG_TRACE(pipeline_manager.log, "pipeline {} finish", pipeline_id);
+#endif
+        if (is_final_task)
+        {
+#ifndef NDEBUG
+            LOG_TRACE(pipeline_manager.log, "final pipeline {} finish", pipeline_id);
+#endif
+            if (auto dag_scheduler = pipeline_manager.getDAGScheduler(mpp_task_id); likely(dag_scheduler))
+                dag_scheduler->submit(PipelineEvent::finish());
+        }
     }
 }
 

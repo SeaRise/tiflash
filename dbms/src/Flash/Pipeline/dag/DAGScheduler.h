@@ -20,10 +20,11 @@
 #include <Flash/Mpp/MPPTaskId.h>
 #include <Flash/Pipeline/dag/Event.h>
 #include <Flash/Pipeline/dag/Pipeline.h>
-#include <Flash/Pipeline/dag/PipelineStatusMachine.h>
 #include <Flash/Planner/PhysicalPlanNode.h>
+#include <Flash/Pipeline/task/PipelineFinishCounter.h>
 
 #include <memory>
+#include <unordered_map>
 
 namespace DB
 {
@@ -65,19 +66,13 @@ private:
 
     PipelinePtr createNonJoinedPipelines(const PipelinePtr & pipeline);
 
-    void submitPipeline(const PipelinePtr & pipeline);
-
-    void submitNext(const PipelinePtr & pipeline);
-
-    void handlePipelineSubmit(const PipelineEvent & event);
-
-    void handlePipelineFinish(const PipelineEvent & event);
+    PipelineFinishCounterPtr submitPipeline(const PipelinePtr & pipeline, bool is_final);
 
     String handlePipelineFail(const PipelineEvent & event);
 
     void handlePipelineCancel(const PipelineEvent & event);
 
-    void cancelRunningPipelines(bool is_kill);
+    void cancelPipelines(bool is_kill);
 
     PhysicalPlanNodePtr handleResultHandler(
         const PhysicalPlanNodePtr & plan_node,
@@ -85,14 +80,16 @@ private:
 
     String pipelineDAGToString(UInt32 pipeline_id) const;
 
-private:
-    UInt32 final_pipeline_id;
+    void addPipeline(const PipelinePtr & pipeline);
 
-    PipelineStatusMachine status_machine;
+    PipelinePtr getPipeline(UInt32 id) const;
+
+private:
+    std::unordered_map<UInt32, PipelinePtr> id_to_pipeline;
 
     PipelineIDGenerator id_generator;
 
-    MPMCQueue<PipelineEvent> event_queue{1999};
+    MPMCQueue<PipelineEvent> event_queue{40};
 
     Context & context;
 

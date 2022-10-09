@@ -35,7 +35,7 @@ Block mergeBlocks(Blocks blocks);
 
 
 #define WRAP_FOR_DIS_ENABLE_PLANNER_BEGIN \
-    std::vector<bool> bools{false, true}; \
+    std::vector<bool> bools{true}; \
     for (auto enable_planner : bools)     \
     {                                     \
         enablePlanner(enable_planner);

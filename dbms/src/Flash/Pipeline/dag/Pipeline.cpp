@@ -17,6 +17,7 @@
 #include <Flash/Planner/PhysicalPlanVisitor.h>
 #include <Interpreters/Context.h>
 #include <Transforms/TransformsPipeline.h>
+#include <Flash/Pipeline/task/PipelineFinishCounter.h>
 
 namespace DB
 {
@@ -41,18 +42,27 @@ Pipeline::Pipeline(
     LOG_FMT_DEBUG(log, "pipeline plan node:\n{}", PhysicalPlanVisitor::visitToString(plan_node));
 }
 
-std::vector<PipelineTask> Pipeline::transform(Context & context, size_t concurrency)
+std::vector<PipelineTask> Pipeline::transform(
+    Context & context, 
+    size_t concurrency, 
+    bool is_final,
+    const std::vector<PipelineFinishCounterPtr> & depends)
 {
     assert(plan_node);
     TransformsPipeline pipeline;
     plan_node->transform(pipeline, context, concurrency);
-
+    RUNTIME_ASSERT(!pipeline.transforms_vec.empty());
+    
     std::vector<PipelineTask> tasks;
+    auto pipeline_finish_counter = std::make_shared<PipelineFinishCounter>(pipeline.transforms_vec.size());
     for (const auto & transforms : pipeline.transforms_vec)
     {
-        tasks.emplace_back(active_task_num++, id, mpp_task_id, transforms);
+        tasks.emplace_back(id, mpp_task_id, transforms, is_final, pipeline_finish_counter, depends);
         task_transforms_vec.push_back(transforms);
     }
+#ifndef NDEBUG
+    LOG_TRACE(log, "pipeline {} transform {} tasks", id, tasks.size());
+#endif
     return tasks;
 }
 
@@ -62,20 +72,10 @@ void Pipeline::cancel(bool is_kill)
     {
         transforms->cancel(is_kill);
     }
-    task_transforms_vec.clear();
 }
 
-void Pipeline::finish(size_t task_id)
+size_t Pipeline::taskNum() const
 {
-    assert(active_task_num > 0);
-    assert(!task_transforms_vec.empty());
-    --active_task_num;
-    task_transforms_vec[task_id] = nullptr;
-}
-
-void Pipeline::finish()
-{
-    task_transforms_vec = {};
-    plan_node = nullptr;
+    return task_transforms_vec.size();
 }
 } // namespace DB

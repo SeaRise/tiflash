@@ -22,7 +22,6 @@ namespace DB
 {
 enum class PipelineEventType
 {
-    submit,
     finish,
     fail,
     cancel,
@@ -30,19 +29,14 @@ enum class PipelineEventType
 
 struct PipelineEvent
 {
-    static PipelineEvent submit(const PipelinePtr & pipeline)
-    {
-        return {pipeline, 0, pipeline->getId(), "", false, PipelineEventType::submit};
-    }
-
     static PipelineEvent finish(UInt32 task_id, UInt32 pipeline_id)
     {
-        return {nullptr, task_id, pipeline_id, "", false, PipelineEventType::finish};
+        return {task_id, pipeline_id, "", false, PipelineEventType::finish};
     }
 
     static PipelineEvent fail(UInt32 task_id, UInt32 pipeline_id, const String & err_msg)
     {
-        return {nullptr, task_id, pipeline_id, err_msg, false, PipelineEventType::fail};
+        return {task_id, pipeline_id, err_msg, false, PipelineEventType::fail};
     }
 
     static PipelineEvent fail(const String & err_msg)
@@ -52,20 +46,18 @@ struct PipelineEvent
 
     static PipelineEvent cancel(bool is_kill)
     {
-        return {nullptr, 0, 0, "", is_kill, PipelineEventType::cancel};
+        return {0, 0, "", is_kill, PipelineEventType::cancel};
     }
 
     PipelineEvent() = default;
 
     PipelineEvent(
-        const PipelinePtr & pipeline_,
         UInt32 task_id_,
         UInt32 pipeline_id_,
         const String & err_msg_,
         bool is_kill_,
         PipelineEventType type_)
-        : pipeline(pipeline_)
-        , task_id(task_id_)
+        : task_id(task_id_)
         , pipeline_id(pipeline_id_)
         , err_msg(err_msg_)
         , is_kill(is_kill_)
@@ -73,8 +65,7 @@ struct PipelineEvent
     {}
 
     PipelineEvent(PipelineEvent && event)
-        : pipeline(std::move(event.pipeline))
-        , task_id(std::move(event.task_id))
+        : task_id(std::move(event.task_id))
         , pipeline_id(std::move(event.pipeline_id))
         , err_msg(std::move(event.err_msg))
         , is_kill(event.is_kill)
@@ -85,7 +76,6 @@ struct PipelineEvent
     {
         if (this != &event)
         {
-            pipeline = std::move(event.pipeline);
             task_id = std::move(event.task_id);
             pipeline_id = std::move(event.pipeline_id);
             err_msg = std::move(event.err_msg);
@@ -95,7 +85,6 @@ struct PipelineEvent
         return *this;
     }
 
-    PipelinePtr pipeline;
     UInt32 task_id;
     UInt32 pipeline_id;
     String err_msg;

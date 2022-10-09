@@ -15,10 +15,10 @@
 #pragma once
 
 #include <Common/Logger.h>
-#include <Common/MPMCQueue.h>
 #include <Flash/Executor/ResultHandler.h>
 #include <Flash/Mpp/MPPTaskId.h>
 #include <Flash/Pipeline/dag/Event.h>
+#include <Flash/Pipeline/dag/EventQueue.h>
 #include <Flash/Pipeline/dag/Pipeline.h>
 #include <Flash/Pipeline/dag/PipelineStatusMachine.h>
 #include <Flash/Planner/PhysicalPlanNode.h>
@@ -69,8 +69,6 @@ private:
 
     void submitNext(const PipelinePtr & pipeline);
 
-    void handlePipelineSubmit(const PipelineEvent & event);
-
     void handlePipelineFinish(const PipelineEvent & event);
 
     String handlePipelineFail(const PipelineEvent & event);
@@ -92,7 +90,7 @@ private:
 
     PipelineIDGenerator id_generator;
 
-    MPMCQueue<PipelineEvent> event_queue{1999};
+    EventQueue event_queue;
 
     Context & context;
 

@@ -22,6 +22,8 @@
 #include <Interpreters/Context.h>
 #include <Storages/Transaction/TMTContext.h>
 
+#include <magic_enum.hpp>
+
 namespace DB
 {
 DAGScheduler::DAGScheduler(
@@ -36,9 +38,7 @@ DAGScheduler::DAGScheduler(
 
 void DAGScheduler::submit(PipelineEvent && event)
 {
-    RUNTIME_ASSERT(
-        event_queue.tryPush(std::move(event)) != MPMCQueueResult::FULL,
-        "dag event queue full");
+    event_queue.submit(std::move(event));
 }
 
 std::pair<bool, String> DAGScheduler::run(
@@ -55,13 +55,15 @@ std::pair<bool, String> DAGScheduler::run(
 
     PipelineEvent event;
     String err_msg;
-    while (likely(event_queue.pop(event) == MPMCQueueResult::OK))
+    EventQueueStatus event_queue_status;
+    while (true)
     {
+        event_queue_status = event_queue.pop(event);
+        if (unlikely(event_queue_status != EventQueueStatus::running))
+            break;
+    
         switch (event.type)
         {
-        case PipelineEventType::submit:
-            handlePipelineSubmit(event);
-            break;
         case PipelineEventType::finish:
             handlePipelineFinish(event);
             break;
@@ -71,12 +73,10 @@ std::pair<bool, String> DAGScheduler::run(
         case PipelineEventType::cancel:
             handlePipelineCancel(event);
             break;
-        default:
-            break;
         }
     }
-    LOG_TRACE(log, "finish mpp task {} with pipeline model", mpp_task_id.toString());
-    return {event_queue.getStatus() == MPMCQueueStatus::FINISHED, err_msg};
+    LOG_TRACE(log, "finish pipeline model mpp task {} with status {}", mpp_task_id.toString(), magic_enum::enum_name(event_queue_status));
+    return {event_queue_status == EventQueueStatus::finished, err_msg};
 }
 
 String DAGScheduler::pipelineDAGToString(UInt32 pipeline_id) const
@@ -145,15 +145,6 @@ void DAGScheduler::handlePipelineFinish(const PipelineEvent & event)
             submitNext(pipeline);
         }
     }
-}
-
-void DAGScheduler::handlePipelineSubmit(const PipelineEvent & event)
-{
-    assert(event.type == PipelineEventType::submit && event.pipeline);
-    const auto & pipeline = event.pipeline;
-    LOG_TRACE(log, "submit pipeline {}", pipeline->toString());
-    auto tasks = pipeline->transform(context, context.getMaxStreams());
-    task_scheduler.submit(tasks);
 }
 
 PipelinePtr DAGScheduler::genPipeline(const PhysicalPlanNodePtr & plan_node)
@@ -268,7 +259,9 @@ void DAGScheduler::submitPipeline(const PipelinePtr & pipeline)
     if (is_ready_for_run)
     {
         status_machine.stateToRunning(pipeline->getId());
-        submit(PipelineEvent::submit(pipeline));
+        LOG_TRACE(log, "submit pipeline {}", pipeline->toString());
+        auto tasks = pipeline->transform(context, context.getMaxStreams());
+        task_scheduler.submit(tasks);
     }
     else
     {

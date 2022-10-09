@@ -15,9 +15,7 @@
 #pragma once
 
 #include <Common/Logger.h>
-#include <Common/MPMCQueue.h>
 #include <Flash/Pipeline/task/PipelineTask.h>
-#include <boost_wrapper/lockfree_queue.h>
 
 #include <memory>
 #include <thread>
@@ -44,7 +42,7 @@ private:
     std::list<PipelineTask> blocked_tasks;
     std::thread io_thread;
 
-    std::atomic<bool> is_shutdown;
+    std::atomic<bool> is_shutdown{false};
 
     LoggerPtr logger = Logger::get("IOPoller");
 };
@@ -55,14 +53,10 @@ public:
     EventLoop(
         size_t loop_id_,
         EventLoopPool & pool_);
-    void finish();
-    void submitSelf(PipelineTask && task);
-    void submit(PipelineTask && task);
     ~EventLoop();
 private:
     void handleCpuModeTask(PipelineTask && task) noexcept;
     void cpuModeLoop() noexcept;
-    bool popTask(PipelineTask & task);
 private:
     size_t loop_id;
     EventLoopPool & pool;
@@ -91,6 +85,8 @@ private:
     void submitCPU(PipelineTask && task);
     void batchSubmitCPU(std::vector<PipelineTask> & tasks);
     void submitIO(PipelineTask && task);
+
+    bool popTask(PipelineTask & task);
 
     void handleFinishTask(const PipelineTask & task);
     void handleErrTask(const PipelineTask & task, const PipelineTaskResult & result);

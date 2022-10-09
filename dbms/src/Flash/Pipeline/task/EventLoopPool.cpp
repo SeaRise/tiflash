@@ -123,18 +123,6 @@ EventLoop::EventLoop(
     cpu_thread = std::thread(&EventLoop::cpuModeLoop, this);
 }
 
-void EventLoop::finish() {}
-
-void EventLoop::submitSelf(PipelineTask && task)
-{
-    submit(std::move(task));
-}
-
-void EventLoop::submit(PipelineTask && task)
-{
-    pool.submitCPU(std::move(task));
-}
-
 EventLoop::~EventLoop()
 {
     cpu_thread.join();
@@ -151,7 +139,7 @@ void EventLoop::handleCpuModeTask(PipelineTask && task) noexcept
         if (task.status == PipelineTaskStatus::io_wait)
             pool.submitIO(std::move(task));
         else
-            submit(std::move(task));
+            pool.submitCPU(std::move(task));
         break;
     }
     case PipelineTaskResultType::finished:
@@ -179,29 +167,10 @@ void EventLoop::cpuModeLoop() noexcept
 #endif
     setThreadName("EventLoop");
     PipelineTask task;
-    while (likely(popTask(task)))
+    while (likely(pool.popTask(task)))
     {
         handleCpuModeTask(std::move(task));
     }
-}
-
-bool EventLoop::popTask(PipelineTask & task)
-{
-    {
-        std::unique_lock<std::mutex> lock(pool.global_mutex);
-        while (true)
-        {
-            if (unlikely(pool.is_closed))
-                return false;
-            if (!pool.cpu_event_queue.empty())
-                break;
-            pool.cv.wait(lock);
-        }
-
-        task = std::move(pool.cpu_event_queue.front());
-        pool.cpu_event_queue.pop_front();
-    }
-    return true;
 }
 
 EventLoopPool::EventLoopPool(
@@ -214,6 +183,25 @@ EventLoopPool::EventLoopPool(
     cpu_loops.reserve(loop_num);
     for (size_t i = 0; i < loop_num; ++i)
         cpu_loops.emplace_back(std::make_unique<EventLoop>(i, *this));
+}
+
+bool EventLoopPool::popTask(PipelineTask & task)
+{
+    {
+        std::unique_lock<std::mutex> lock(global_mutex);
+        while (true)
+        {
+            if (unlikely(is_closed))
+                return false;
+            if (!cpu_event_queue.empty())
+                break;
+            cv.wait(lock);
+        }
+
+        task = std::move(cpu_event_queue.front());
+        cpu_event_queue.pop_front();
+    }
+    return true;
 }
 
 void EventLoopPool::submit(std::vector<PipelineTask> & tasks)
@@ -257,8 +245,6 @@ void EventLoopPool::finish()
         is_closed = true;
         cv.notify_all();
     }
-    for (auto & cpu_loop : cpu_loops)
-        cpu_loop->finish();
     io_poller.finish();
 }
 

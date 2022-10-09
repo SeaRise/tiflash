@@ -60,7 +60,8 @@ void Pipeline::cancel(bool is_kill)
 {
     for (const auto & transforms : task_transforms_vec)
     {
-        transforms->cancel(is_kill);
+        if (transforms)
+            transforms->cancel(is_kill);
     }
     task_transforms_vec.clear();
 }

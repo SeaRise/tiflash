@@ -16,37 +16,13 @@
 
 #include <Common/Logger.h>
 #include <Flash/Pipeline/task/PipelineTask.h>
+#include <Flash/Pipeline/task/IOPoller.h>
 
 #include <memory>
 #include <thread>
 
 namespace DB
 {
-class EventLoopPool;
-
-class IOPoller
-{
-public:
-    explicit IOPoller(EventLoopPool & pool_);
-    void finish();
-    void submit(PipelineTask && task);
-    ~IOPoller();
-private:
-    void ioModeLoop();
-private:
-    mutable std::mutex mutex;
-    std::condition_variable cond;
-
-    EventLoopPool & pool;
-
-    std::list<PipelineTask> blocked_tasks;
-    std::thread io_thread;
-
-    std::atomic<bool> is_shutdown{false};
-
-    LoggerPtr logger = Logger::get("IOPoller");
-};
-
 class EventLoop
 {
 public:
@@ -83,8 +59,7 @@ public:
 
 private:
     void submitCPU(PipelineTask && task);
-    void batchSubmitCPU(std::vector<PipelineTask> & tasks);
-    void submitIO(PipelineTask && task);
+    void submitCPU(std::vector<PipelineTask> & tasks);
 
     bool popTask(PipelineTask & task);
 

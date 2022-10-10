@@ -21,101 +21,6 @@
 
 namespace DB
 {
-IOPoller::IOPoller(EventLoopPool & pool_): pool(pool_)
-{
-    io_thread = std::thread(&IOPoller::ioModeLoop, this);
-}
-
-void IOPoller::finish()
-{
-    if (this->is_shutdown.load() == false) {
-        this->is_shutdown.store(true, std::memory_order_release);
-        cond.notify_one();
-    }
-}
-
-void IOPoller::submit(PipelineTask && task)
-{
-    std::unique_lock<std::mutex> lock(mutex);
-    blocked_tasks.emplace_back(std::move(task));
-    cond.notify_one();
-}
-
-IOPoller::~IOPoller()
-{
-    io_thread.join();
-    LOG_INFO(logger, "stop io event loop");
-}
-
-void IOPoller::ioModeLoop()
-{
-    LOG_INFO(logger, "start io event loop");
-    std::list<PipelineTask> local_blocked_tasks;
-    int spin_count = 0;
-    std::vector<PipelineTask> ready_tasks;
-    while (!is_shutdown.load(std::memory_order_acquire))
-    {
-        {
-            std::unique_lock<std::mutex> lock(this->mutex);
-            local_blocked_tasks.splice(local_blocked_tasks.end(), blocked_tasks);
-            if (local_blocked_tasks.empty() && blocked_tasks.empty()) {
-                std::cv_status cv_status = std::cv_status::no_timeout;
-                while (!is_shutdown.load(std::memory_order_acquire) && this->blocked_tasks.empty()) {
-                    cv_status = cond.wait_for(lock, std::chrono::milliseconds(10));
-                }
-                if (cv_status == std::cv_status::timeout) {
-                    continue;
-                }
-                if (is_shutdown.load(std::memory_order_acquire)) {
-                    break;
-                }
-                local_blocked_tasks.splice(local_blocked_tasks.end(), blocked_tasks);
-            }
-        }
-
-        auto task_it = local_blocked_tasks.begin();
-        while (task_it != local_blocked_tasks.end()) {
-            auto & task = *task_it;
-
-            auto pre_status = task.status;
-            if (task.tryToCpuMode())
-            {
-                if (pre_status == PipelineTaskStatus::io_wait)
-                    ready_tasks.emplace_back(std::move(task));
-                else
-                    pool.handleFinishTask(task);
-                task_it = local_blocked_tasks.erase(task_it);
-            }
-            else
-            {
-                ++task_it;
-            }
-        }
-
-        if (ready_tasks.empty()) {
-            spin_count += 1;
-        } else {
-            spin_count = 0;
-            pool.batchSubmitCPU(ready_tasks);
-            ready_tasks.clear();
-        }
-
-        if (spin_count != 0 && spin_count % 64 == 0) {
-#ifdef __x86_64__
-            _mm_pause();
-#else
-            // TODO: Maybe there's a better intrinsic like _mm_pause on non-x86_64 architecture.
-            sched_yield();
-#endif
-        }
-        if (spin_count == 640) {
-            spin_count = 0;
-            sched_yield();
-        }
-    }
-    LOG_INFO(logger, "io event loop finished");
-}
-
 EventLoop::EventLoop(
     size_t loop_id_,
     EventLoopPool & pool_)
@@ -140,7 +45,7 @@ void EventLoop::handleCpuModeTask(PipelineTask && task)
     case PipelineTaskResultType::running:
     {
         if (task.status == PipelineTaskStatus::io_wait)
-            pool.submitIO(std::move(task));
+            pool.io_poller.submit(std::move(task));
         else
             pool.submitCPU(std::move(task));
         break;
@@ -148,7 +53,7 @@ void EventLoop::handleCpuModeTask(PipelineTask && task)
     case PipelineTaskResultType::finished:
     {
         if (task.status == PipelineTaskStatus::io_finish)
-            pool.submitIO(std::move(task));
+            pool.io_poller.submit(std::move(task));
         else
             pool.handleFinishTask(task);
         break;
@@ -211,39 +116,49 @@ bool EventLoopPool::popTask(PipelineTask & task)
 
 void EventLoopPool::submit(std::vector<PipelineTask> & tasks)
 {
+    if (tasks.empty())
+        return;
+    std::vector<PipelineTask> io_tasks;
+    io_tasks.reserve(tasks.size());
+    std::vector<PipelineTask> cpu_tasks;
+    cpu_tasks.reserve(tasks.size());
     for (auto & task : tasks)
     {
         task.prepare();
         if (task.tryToIOMode())
-            submitIO(std::move(task));
+            io_tasks.emplace_back(std::move(task));
         else
-            submitCPU(std::move(task));
+            cpu_tasks.emplace_back(std::move(task));
     }
+    io_poller.submit(io_tasks);
+    submitCPU(cpu_tasks);
 }
 
 void EventLoopPool::submitCPU(PipelineTask && task)
 {
-    LOG_DEBUG(logger, "submit {} to cpu event loop", task.toString());
-    std::lock_guard<std::mutex> lock(global_mutex);
-    cpu_event_queue.emplace_back(std::move(task));
-    cv.notify_one();
-}
-
-void EventLoopPool::batchSubmitCPU(std::vector<PipelineTask> & tasks)
-{
-    std::lock_guard<std::mutex> lock(global_mutex);
-    for (auto & task : tasks)
     {
-        LOG_DEBUG(logger, "submit {} to cpu event loop", task.toString());
+        std::lock_guard<std::mutex> lock(global_mutex);
         cpu_event_queue.emplace_back(std::move(task));
-        cv.notify_one();
     }
+    cv.notify_one();
+    LOG_DEBUG(logger, "submit {} to cpu event loop", task.toString());
 }
 
-void EventLoopPool::submitIO(PipelineTask && task)
+void EventLoopPool::submitCPU(std::vector<PipelineTask> & tasks)
 {
-    LOG_DEBUG(logger, "submit {} to io event loop", task.toString());
-    io_poller.submit(std::move(task));
+    if (tasks.empty())
+        return;
+    size_t notify_count = std::min(tasks.size(), cpu_loops.size());
+    {
+        std::lock_guard<std::mutex> lock(global_mutex);
+        for (auto & task : tasks)
+        {
+            LOG_DEBUG(logger, "submit {} to cpu event loop", task.toString());
+            cpu_event_queue.emplace_back(std::move(task));
+        }
+    }
+    for (size_t i = 0; i < notify_count; ++i)
+        cv.notify_one();
 }
 
 void EventLoopPool::finish()
@@ -251,8 +166,8 @@ void EventLoopPool::finish()
     {
         std::lock_guard<std::mutex> lock(global_mutex);
         is_closed = true;
-        cv.notify_all();
     }
+    cv.notify_all();
     io_poller.finish();
 }
 

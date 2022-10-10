@@ -15,7 +15,7 @@
 #pragma once
 
 #include <Flash/Planner/plans/PhysicalLeaf.h>
-#include <Transforms/SortBreaker.h>
+#include <Transforms/TopNBreaker.h>
 
 namespace DB
 {
@@ -27,10 +27,10 @@ public:
         const NamesAndTypes & schema_,
         const String & req_id,
         const Block & sample_block_,
-        const SortBreakerPtr & sort_breaker_)
+        const TopNBreakerPtr & topn_breaker_)
         : PhysicalLeaf(executor_id_, PlanType::FinalTopN, schema_, req_id)
         , sample_block(sample_block_)
-        , sort_breaker(sort_breaker_)
+        , topn_breaker(topn_breaker_)
     {}
 
     void finalize(const Names & parent_require) override;
@@ -50,6 +50,6 @@ private:
 
     Block sample_block;
 
-    SortBreakerPtr sort_breaker;
+    TopNBreakerPtr topn_breaker;
 };
 } // namespace DB

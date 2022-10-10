@@ -14,34 +14,30 @@
 
 #pragma once
 
-#include <Core/SortDescription.h>
-#include <Interpreters/sortBlock.h>
-#include <Transforms/Sink.h>
-#include <Transforms/SortBreaker.h>
+#include <Transforms/TopNBreaker.h>
+#include <Transforms/Source.h>
 
 namespace DB
 {
-class SortingSink : public Sink
+class TopNSource : public Source
 {
 public:
-    SortingSink(
-        const SortDescription & description_,
-        size_t limit_,
-        const SortBreakerPtr & sort_breaker_)
-        : description(description_)
-        , limit(limit_)
-        , sort_breaker(sort_breaker_)
+    explicit TopNSource(
+        const TopNBreakerPtr & topn_breaker_)
+        : topn_breaker(topn_breaker_)
     {}
 
-    bool write(Block & block) override;
+    Block read() override
+    {
+        return topn_breaker->read();
+    }
 
-    void finish() override;
+    Block getHeader() const override
+    {
+        return topn_breaker->getHeader();
+    }
 
 private:
-    SortDescription description;
-    size_t limit;
-
-    SortBreakerPtr sort_breaker;
-    Blocks local_blocks;
+    TopNBreakerPtr topn_breaker;
 };
 } // namespace DB

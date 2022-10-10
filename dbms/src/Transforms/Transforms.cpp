@@ -47,10 +47,7 @@ bool Transforms::execute()
     if (unlikely(isCancelledOrThrowIfKilled()))
         return false;
 
-    auto [is_ready, block] = source->read();
-    if (!is_ready)
-        return true;
-
+    auto block = source->read();
     for (const auto & transform : transforms)
     {
         if (!transform->transform(block))

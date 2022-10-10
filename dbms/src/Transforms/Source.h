@@ -25,7 +25,7 @@ class Source
 {
 public:
     virtual ~Source() = default;
-    virtual std::pair<bool, Block> read() = 0;
+    virtual Block read() = 0;
     virtual Block getHeader() const = 0;
     virtual void cancel(bool /*kill*/) {}
     virtual void prepare() {}

@@ -25,9 +25,9 @@ public:
         : header(header)
     {}
 
-    std::pair<bool, Block> read() override
+    Block read() override
     {
-        return {true, {}};
+        return {};
     }
 
     Block getHeader() const override

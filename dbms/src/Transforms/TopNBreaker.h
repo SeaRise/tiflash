@@ -17,17 +17,16 @@
 #include <Core/Block.h>
 #include <Core/SortDescription.h>
 #include <DataStreams/IBlockInputStream.h>
-#include <Transforms/TryLock.h>
 
 #include <memory>
 
 namespace DB
 {
 // todo use removeConstantsFromBlock, etc to improve sort by literal like MergeSortingBlockInputStream.
-class SortBreaker
+class TopNBreaker
 {
 public:
-    SortBreaker(
+    TopNBreaker(
         const SortDescription & description_,
         const String & req_id_,
         size_t max_merged_block_size_,
@@ -41,8 +40,6 @@ public:
     void add(Blocks && local_blocks);
 
     Block read();
-
-    std::pair<bool, Block> tryRead();
 
     void initHeader(const Block & header_);
 
@@ -59,9 +56,8 @@ private:
     size_t limit;
 
     std::mutex mu;
-    std::vector<Blocks> multi_local_blocks;
     Blocks blocks;
     std::unique_ptr<IBlockInputStream> impl;
 };
-using SortBreakerPtr = std::shared_ptr<SortBreaker>;
+using TopNBreakerPtr = std::shared_ptr<TopNBreaker>;
 } // namespace DB

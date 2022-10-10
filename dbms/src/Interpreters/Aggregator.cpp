@@ -1508,12 +1508,14 @@ public:
 
         if (is_pipeline)
         {
+            LOG_DEBUG(log, "init merge stream for pipeline model");
             RUNTIME_ASSERT(!aggregator.params.overflow_row);
             if (!data.empty())
             {
                 is_two_level = data[0]->isTwoLevel();
                 if (is_two_level)
                 {
+                    LOG_DEBUG(log, "init two level merge stream for pipeline model");
                     if (!parallel_merge_data)
                         parallel_merge_data = std::make_unique<ParallelMergeData>();
                     if (current_bucket_num == -1)
@@ -1521,6 +1523,10 @@ public:
                         current_bucket_num.fetch_add(1);
                         RUNTIME_ASSERT(data[0]->type != AggregatedDataVariants::Type::without_key);
                     }
+                }
+                else
+                {
+                    LOG_DEBUG(log, "init one level merge stream for pipeline model");
                 }
             }
         }

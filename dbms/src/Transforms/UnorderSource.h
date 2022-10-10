@@ -17,8 +17,6 @@
 #include <Storages/DeltaMerge/SegmentReadTaskPool.h>
 #include <Transforms/Source.h>
 
-#include <mutex>
-
 namespace DB
 {
 // copy from UnorderedInputStream
@@ -55,12 +53,12 @@ public:
         LOG_FMT_DEBUG(log, "Destroy, pool_id={} ref_no={}", task_pool->poolId(), ref_no);
     }
 
-    std::pair<bool, Block> read() override
+    Block read() override
     {
-        std::lock_guard lock(mutex);
         if (done)
-            return {true, {}};
+            return {};
         Block res;
+        assert(io_block);
         std::swap(res, io_block);
         if (extra_table_id_index != InvalidColumnID)
         {
@@ -71,15 +69,13 @@ public:
             col.column = std::move(col_data);
             res.insert(extra_table_id_index, std::move(col));
         }
-        return {true, std::move(res)};
+        return res;
     }
 
     bool isIOReady() override
     {
-        std::lock_guard lock(mutex);
         if (done || io_block)
             return true;
-        addReadTaskPoolToScheduler();
         while (true)
         {
             Block res;
@@ -110,6 +106,11 @@ public:
         return header;
     }
 
+    void prepare() override
+    {
+        addReadTaskPoolToScheduler();
+    }
+
 private:
     void addReadTaskPoolToScheduler()
     {
@@ -132,7 +133,5 @@ private:
     LoggerPtr log;
     int64_t ref_no;
     bool task_pool_added;
-
-    std::mutex mutex;
 };
 } // namespace DB

@@ -16,7 +16,7 @@
 #include <Flash/Planner/FinalizeHelper.h>
 #include <Flash/Planner/plans/PhysicalFinalTopN.h>
 #include <Interpreters/Context.h>
-#include <Transforms/SortedSource.h>
+#include <Transforms/TopNSource.h>
 #include <Transforms/TransformsPipeline.h>
 
 namespace DB
@@ -38,10 +38,10 @@ const Block & PhysicalFinalTopN::getSampleBlock() const
 
 void PhysicalFinalTopN::transform(TransformsPipeline & pipeline, Context &, size_t concurrency)
 {
-    sort_breaker->initForRead();
-    pipeline.init(concurrency);
+    topn_breaker->initForRead();
+    pipeline.init(std::min(1, concurrency));
     pipeline.transform([&](auto & transforms) {
-        transforms->setSource(std::make_shared<SortedSource>(sort_breaker));
+        transforms->setSource(std::make_shared<TopNSource>(topn_breaker));
     });
 }
 } // namespace DB

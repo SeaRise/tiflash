@@ -52,51 +52,74 @@ try
 {
     startServers(1);
     {
-        std::vector<String> expected_strings = {
-            R"(
-exchange_sender_5 | type:Hash, {<0, Long>, <1, String>, <2, String>}
- aggregation_4 | group_by: {<1, String>, <2, String>}, agg_func: {max(<0, Long>)}
-  table_scan_0 | {<0, Long>, <1, String>, <2, String>}
-)",
-            R"(
-exchange_sender_3 | type:PassThrough, {<0, Long>}
- project_2 | {<0, Long>}
-  aggregation_1 | group_by: {<1, String>, <2, String>}, agg_func: {max(<0, Long>)}
-   exchange_receiver_6 | type:PassThrough, {<0, Long>, <1, String>, <2, String>}
-)"};
-        auto expected_cols = {toNullableVec<Int32>({1, {}, 10000000, 10000000})};
+        auto expected_cols = {
+            toNullableVec<String>({{}, "banana", "banana"}),
+            toNullableVec<String>({{}, "apple", "banana"}),
+            toNullableVec<String>({{}, "banana", "banana"}),
+            toNullableVec<String>({{}, "apple", "banana"})};
 
-        ASSERT_MPPTASK_EQUAL_PLAN_AND_RESULT(
-            context
-                .scan("test_db", "test_table_1")
-                .aggregation({Max(col("s1"))}, {col("s2"), col("s3")})
-                .project({"max(s1)"}),
-            expected_strings,
-            expected_cols);
-    }
-    {
         std::vector<String> expected_strings = {
-            R"(
-exchange_sender_5 | type:Hash, {<0, Long>, <1, String>, <2, String>}
- aggregation_4 | group_by: {<1, String>, <2, String>}, agg_func: {max(<0, Long>)}
-  table_scan_0 | {<0, Long>, <1, String>, <2, String>}
-)",
-            R"(
-exchange_sender_3 | type:PassThrough, {<0, Long>}
- project_2 | {<0, Long>}
-  aggregation_1 | group_by: {<1, String>, <2, String>}, agg_func: {max(<0, Long>)}
-   exchange_receiver_6 | type:PassThrough, {<0, Long>, <1, String>, <2, String>}
-)"};
-        auto expected_cols = {toNullableVec<Int32>({1, {}, 10000000, 10000000})};
+            R"(exchange_sender_5 | type:Hash, {<0, String>, <1, String>}
+ table_scan_1 | {<0, String>, <1, String>})",
+            R"(exchange_sender_4 | type:Hash, {<0, String>, <1, String>}
+ table_scan_0 | {<0, String>, <1, String>})",
+            R"(exchange_sender_3 | type:PassThrough, {<0, String>, <1, String>, <2, String>, <3, String>}
+ Join_2 | LeftOuterJoin, HashJoin. left_join_keys: {<0, String>}, right_join_keys: {<0, String>}
+  exchange_receiver_6 | type:PassThrough, {<0, String>, <1, String>}
+  exchange_receiver_7 | type:PassThrough, {<0, String>, <1, String>})"};
 
-        ASSERT_MPPTASK_EQUAL_PLAN_AND_RESULT(
-            context
-                .scan("test_db", "test_table_1")
-                .aggregation({Max(col("s1"))}, {col("s2"), col("s3")})
-                .project({"max(s1)"}),
-            expected_strings,
-            expected_cols);
+        ASSERT_MPPTASK_EQUAL_PLAN_AND_RESULT(context
+                                                 .scan("test_db", "l_table")
+                                                 .join(context.scan("test_db", "r_table"), tipb::JoinType::TypeLeftOuterJoin, {col("join_c")}),
+                                             expected_strings,
+                                             expect_cols);
     }
+//     {
+//         std::vector<String> expected_strings = {
+//             R"(
+// exchange_sender_5 | type:Hash, {<0, Long>, <1, String>, <2, String>}
+//  aggregation_4 | group_by: {<1, String>, <2, String>}, agg_func: {max(<0, Long>)}
+//   table_scan_0 | {<0, Long>, <1, String>, <2, String>}
+// )",
+//             R"(
+// exchange_sender_3 | type:PassThrough, {<0, Long>}
+//  project_2 | {<0, Long>}
+//   aggregation_1 | group_by: {<1, String>, <2, String>}, agg_func: {max(<0, Long>)}
+//    exchange_receiver_6 | type:PassThrough, {<0, Long>, <1, String>, <2, String>}
+// )"};
+//         auto expected_cols = {toNullableVec<Int32>({1, {}, 10000000, 10000000})};
+
+//         ASSERT_MPPTASK_EQUAL_PLAN_AND_RESULT(
+//             context
+//                 .scan("test_db", "test_table_1")
+//                 .aggregation({Max(col("s1"))}, {col("s2"), col("s3")})
+//                 .project({"max(s1)"}),
+//             expected_strings,
+//             expected_cols);
+//     }
+//     {
+//         std::vector<String> expected_strings = {
+//             R"(
+// exchange_sender_5 | type:Hash, {<0, Long>, <1, String>, <2, String>}
+//  aggregation_4 | group_by: {<1, String>, <2, String>}, agg_func: {max(<0, Long>)}
+//   table_scan_0 | {<0, Long>, <1, String>, <2, String>}
+// )",
+//             R"(
+// exchange_sender_3 | type:PassThrough, {<0, Long>}
+//  project_2 | {<0, Long>}
+//   aggregation_1 | group_by: {<1, String>, <2, String>}, agg_func: {max(<0, Long>)}
+//    exchange_receiver_6 | type:PassThrough, {<0, Long>, <1, String>, <2, String>}
+// )"};
+//         auto expected_cols = {toNullableVec<Int32>({1, {}, 10000000, 10000000})};
+
+//         ASSERT_MPPTASK_EQUAL_PLAN_AND_RESULT(
+//             context
+//                 .scan("test_db", "test_table_1")
+//                 .aggregation({Max(col("s1"))}, {col("s2"), col("s3")})
+//                 .project({"max(s1)"}),
+//             expected_strings,
+//             expected_cols);
+//     }
 }
 CATCH
 

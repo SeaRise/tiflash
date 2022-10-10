@@ -17,7 +17,7 @@
 #include <Core/SortDescription.h>
 #include <Flash/Planner/plans/PhysicalUnary.h>
 #include <Interpreters/ExpressionActions.h>
-#include <Transforms/SortBreaker.h>
+#include <Transforms/TopNBreaker.h>
 
 namespace DB
 {
@@ -32,12 +32,12 @@ public:
         const SortDescription & order_descr_,
         const ExpressionActionsPtr & before_sort_actions_,
         size_t limit_,
-        const SortBreakerPtr & sort_breaker_)
+        const TopNBreakerPtr & topn_breaker_)
         : PhysicalUnary(executor_id_, PlanType::PartialTopN, schema_, req_id, child_)
         , order_descr(order_descr_)
         , before_sort_actions(before_sort_actions_)
         , limit(limit_)
-        , sort_breaker(sort_breaker_)
+        , topn_breaker(topn_breaker_)
     {}
 
     void finalize(const Names & parent_require) override;
@@ -58,6 +58,6 @@ private:
     SortDescription order_descr;
     ExpressionActionsPtr before_sort_actions;
     size_t limit;
-    SortBreakerPtr sort_breaker;
+    TopNBreakerPtr topn_breaker;
 };
 } // namespace DB

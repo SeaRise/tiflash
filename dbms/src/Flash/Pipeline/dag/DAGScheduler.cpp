@@ -45,7 +45,7 @@ std::pair<bool, String> DAGScheduler::run(
     const PhysicalPlanNodePtr & plan_node,
     ResultHandler result_handler)
 {
-    LOG_TRACE(log, "start run mpp task {} with pipeline model", mpp_task_id.toString());
+    LOG_DEBUG(log, "start run mpp task {} with pipeline model", mpp_task_id.toString());
     assert(plan_node);
     auto final_pipeline = genPipeline(handleResultHandler(plan_node, result_handler));
     final_pipeline_id = final_pipeline->getId();
@@ -75,7 +75,7 @@ std::pair<bool, String> DAGScheduler::run(
             break;
         }
     }
-    LOG_TRACE(log, "finish pipeline model mpp task {} with status {}", mpp_task_id.toString(), magic_enum::enum_name(event_queue_status));
+    LOG_DEBUG(log, "finish pipeline model mpp task {} with status {}", mpp_task_id.toString(), magic_enum::enum_name(event_queue_status));
     return {event_queue_status == EventQueueStatus::finished, err_msg};
 }
 
@@ -132,7 +132,7 @@ void DAGScheduler::handlePipelineFinish(const PipelineEvent & event)
     pipeline->finish(event.task_id);
     if (pipeline->active_task_num == 0)
     {
-        LOG_TRACE(log, "pipeline {} finished", pipeline->toString());
+        LOG_DEBUG(log, "pipeline {} finished", pipeline->toString());
         status_machine.stateToComplete(event.pipeline_id);
         pipeline->finish();
         if (event.pipeline_id == final_pipeline_id)
@@ -259,8 +259,8 @@ void DAGScheduler::submitPipeline(const PipelinePtr & pipeline)
     if (is_ready_for_run)
     {
         status_machine.stateToRunning(pipeline->getId());
-        LOG_TRACE(log, "submit pipeline {}", pipeline->toString());
         auto tasks = pipeline->transform(context, context.getMaxStreams());
+        LOG_DEBUG(log, "submit pipeline {} with task num {}", pipeline->toString(), tasks.size());
         task_scheduler.submit(tasks);
     }
     else

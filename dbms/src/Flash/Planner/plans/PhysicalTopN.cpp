@@ -24,7 +24,7 @@
 #include <Flash/Planner/plans/PhysicalPipelineBreaker.h>
 #include <Flash/Planner/plans/PhysicalTopN.h>
 #include <Interpreters/Context.h>
-#include <Transforms/SortBreaker.h>
+#include <Transforms/TopNBreaker.h>
 
 namespace DB
 {
@@ -64,7 +64,7 @@ PhysicalPlanNodePtr PhysicalTopN::build(
     else
     {
         const auto & settings = context.getSettingsRef();
-        SortBreakerPtr sort_breaker = std::make_shared<SortBreaker>(
+        TopNBreakerPtr topn_breaker = std::make_shared<TopNBreaker>(
             order_descr,
             log->identifier(),
             settings.max_block_size,
@@ -78,7 +78,7 @@ PhysicalPlanNodePtr PhysicalTopN::build(
             order_descr,
             before_sort_actions,
             top_n.limit(),
-            sort_breaker);
+            topn_breaker);
         physical_partial_topn->notTiDBOperator();
 
         auto physical_final_topn = std::make_shared<PhysicalFinalTopN>(
@@ -86,7 +86,7 @@ PhysicalPlanNodePtr PhysicalTopN::build(
             child->getSchema(),
             log->identifier(),
             before_sort_actions->getSampleBlock(),
-            sort_breaker);
+            topn_breaker);
 
         auto physical_breaker = std::make_shared<PhysicalPipelineBreaker>(
             executor_id,

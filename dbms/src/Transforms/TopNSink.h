@@ -14,28 +14,34 @@
 
 #pragma once
 
+#include <Core/SortDescription.h>
+#include <Interpreters/sortBlock.h>
+#include <Transforms/Sink.h>
+#include <Transforms/TopNBreaker.h>
+
 namespace DB
 {
-template <typename Mutex>
-class TryLock
+class TopNSink : public Sink
 {
 public:
-    explicit TryLock(Mutex & m_) noexcept
-        : m(m_)
-    {
-        is_locked = m.try_lock();
-    }
+    TopNSink(
+        const SortDescription & description_,
+        size_t limit_,
+        const TopNBreakerPtr & topn_breaker_)
+        : description(description_)
+        , limit(limit_)
+        , topn_breaker(topn_breaker_)
+    {}
 
-    ~TryLock()
-    {
-        if (is_locked)
-            m.unlock();
-    }
+    bool write(Block & block) override;
 
-    bool isLocked() const { return is_locked; }
+    void finish() override;
 
 private:
-    Mutex & m;
-    bool is_locked = false;
+    SortDescription description;
+    size_t limit;
+
+    TopNBreakerPtr topn_breaker;
+    Blocks local_blocks;
 };
 } // namespace DB

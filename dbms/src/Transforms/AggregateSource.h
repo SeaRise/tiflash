@@ -27,9 +27,9 @@ public:
         : agg_store(agg_store_)
     {}
 
-    std::pair<bool, Block> read() override
+    Block read() override
     {
-        return {true, agg_store->readForMerge()};
+        return agg_store->readForMerge();
     }
 
     Block getHeader() const override

@@ -13,51 +13,37 @@
 // limitations under the License.
 
 #include <DataStreams/MergeSortingBlockInputStream.h>
-#include <Transforms/SortBreaker.h>
+#include <Transforms/TopNBreaker.h>
 
 namespace DB
 {
-void SortBreaker::add(Blocks && local_blocks)
+void TopNBreaker::add(Blocks && local_blocks)
 {
-    std::lock_guard<std::mutex> lock(mu);
-    multi_local_blocks.emplace_back(std::move(local_blocks));
+    {
+        std::lock_guard<std::mutex> lock(mu);
+        blocks.reserve(blocks.size() + local_blocks.size());
+        for (auto & local_block : local_blocks)
+            blocks.emplace_back(std::move(local_block));
+    }
+    local_blocks = {};
 }
 
-void SortBreaker::initHeader(const Block & header_)
+void TopNBreaker::initHeader(const Block & header_)
 {
     assert(!header);
     header = header_.cloneEmpty();
 }
 
-Block SortBreaker::read()
+Block TopNBreaker::read()
 {
     assert(impl);
     std::lock_guard<std::mutex> lock(mu);
     return impl->read();
 }
 
-std::pair<bool, Block> SortBreaker::tryRead()
-{
-    assert(impl);
-    TryLock lock(mu);
-    if (lock.isLocked())
-        return {true, impl->read()};
-    else
-        return {false, {}};
-}
-
-void SortBreaker::initForRead()
+void TopNBreaker::initForRead()
 {
     std::lock_guard<std::mutex> lock(mu);
-    size_t reverse_size = 0;
-    for (const auto & local_blocks : multi_local_blocks)
-        reverse_size += local_blocks.size();
-    blocks.reserve(reverse_size);
-    for (auto & local_blocks : multi_local_blocks)
-    {
-        for (auto & local_block : local_blocks)
-            blocks.emplace_back(std::move(local_block));
-    }
     assert(header.rows() == 0);
     if (blocks.empty())
         blocks.push_back(header);
@@ -70,7 +56,7 @@ void SortBreaker::initForRead()
         limit);
 }
 
-Block SortBreaker::getHeader()
+Block TopNBreaker::getHeader()
 {
     assert(impl);
     return impl->getHeader();

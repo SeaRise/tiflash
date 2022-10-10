@@ -22,7 +22,7 @@
 #include <Flash/Planner/plans/PhysicalPartialTopN.h>
 #include <Interpreters/Context.h>
 #include <Transforms/ExpressionTransform.h>
-#include <Transforms/SortingSink.h>
+#include <Transforms/TopNSink.h>
 #include <Transforms/TransformsPipeline.h>
 
 namespace DB
@@ -57,8 +57,8 @@ void PhysicalPartialTopN::transform(TransformsPipeline & pipeline, Context & con
 
     pipeline.transform([&](auto & transforms) {
         transforms->append(std::make_shared<ExpressionTransform>(before_sort_actions));
-        transforms->setSink(std::make_shared<SortingSink>(order_descr, limit, sort_breaker));
+        transforms->setSink(std::make_shared<TopNSink>(order_descr, limit, topn_breaker));
     });
-    sort_breaker->initHeader(pipeline.getHeader());
+    topn_breaker->initHeader(pipeline.getHeader());
 }
 } // namespace DB

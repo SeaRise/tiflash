@@ -32,7 +32,7 @@ public:
     void submit(PipelineTask && task);
     ~IOPoller();
 private:
-    void ioModeLoop() noexcept;
+    void ioModeLoop();
 private:
     mutable std::mutex mutex;
     std::condition_variable cond;
@@ -55,8 +55,8 @@ public:
         EventLoopPool & pool_);
     ~EventLoop();
 private:
-    void handleCpuModeTask(PipelineTask && task) noexcept;
-    void cpuModeLoop() noexcept;
+    void handleCpuModeTask(PipelineTask && task);
+    void cpuModeLoop();
 private:
     size_t loop_id;
     EventLoopPool & pool;

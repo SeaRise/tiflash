@@ -24,7 +24,6 @@
 #include <common/logger_useful.h>
 
 #include <chrono>
-#include <mutex>
 #include <thread>
 #include <utility>
 
@@ -59,7 +58,6 @@ public:
     };
     bool isIOReady() override
     {
-        std::lock_guard lock(mutex);
         if (done || recv_msg || !block_queue.empty() || !error_msg.empty())
             return true;
         auto fetch_result = fetchRemoteResult();
@@ -76,11 +74,10 @@ public:
             return true;
         }
     }
-    std::pair<bool, Block> read() override
+    Block read() override
     {
-        std::lock_guard lock(mutex);
         if (done)
-            return {true, {}};
+            return {};
         if (block_queue.empty())
         {
             if (unlikely(!error_msg.empty()))
@@ -99,7 +96,7 @@ public:
         // todo should merge some blocks to make sure the output block is big enough
         Block block = block_queue.front();
         block_queue.pop();
-        return {true, std::move(block)};
+        return block;
     }
 
 private:
@@ -145,7 +142,6 @@ private:
     // CoprocessorBlockInputStream doesn't take care of this.
     size_t stream_id;
 
-    std::mutex mutex;
     std::shared_ptr<ReceivedMessage> recv_msg;
     String error_msg;
 };

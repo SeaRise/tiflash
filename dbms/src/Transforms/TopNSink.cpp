@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <Transforms/SortingSink.h>
+#include <Transforms/TopNSink.h>
 
 namespace DB
 {
-bool SortingSink::write(Block & block)
+bool TopNSink::write(Block & block)
 {
     if (unlikely(!block))
         return false;
@@ -26,8 +26,8 @@ bool SortingSink::write(Block & block)
     return true;
 }
 
-void SortingSink::finish()
+void TopNSink::finish()
 {
-    sort_breaker->add(std::move(local_blocks));
+    topn_breaker->add(std::move(local_blocks));
 }
 } // namespace DB

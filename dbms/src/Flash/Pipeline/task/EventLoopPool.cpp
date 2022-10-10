@@ -47,8 +47,9 @@ IOPoller::~IOPoller()
     LOG_INFO(logger, "stop io event loop");
 }
 
-void IOPoller::ioModeLoop() noexcept
+void IOPoller::ioModeLoop()
 {
+    LOG_INFO(logger, "start io event loop");
     std::list<PipelineTask> local_blocked_tasks;
     int spin_count = 0;
     std::vector<PipelineTask> ready_tasks;
@@ -112,6 +113,7 @@ void IOPoller::ioModeLoop() noexcept
             sched_yield();
         }
     }
+    LOG_INFO(logger, "io event loop finished");
 }
 
 EventLoop::EventLoop(
@@ -129,8 +131,9 @@ EventLoop::~EventLoop()
     LOG_INFO(logger, "stop event loop");
 }
 
-void EventLoop::handleCpuModeTask(PipelineTask && task) noexcept
+void EventLoop::handleCpuModeTask(PipelineTask && task)
 {
+    LOG_DEBUG(logger, "handle cpu mode task {}", task.toString());
     auto result = task.execute();
     switch (result.type)
     {
@@ -158,7 +161,7 @@ void EventLoop::handleCpuModeTask(PipelineTask && task) noexcept
     }
 }
 
-void EventLoop::cpuModeLoop() noexcept
+void EventLoop::cpuModeLoop()
 {
 #ifdef __linux__
     struct sched_param param;
@@ -166,11 +169,13 @@ void EventLoop::cpuModeLoop() noexcept
     sched_setparam(0, &param);
 #endif
     setThreadName("EventLoop");
+    LOG_INFO(logger, "start cpu event loop {}", loop_id);
     PipelineTask task;
     while (likely(pool.popTask(task)))
     {
         handleCpuModeTask(std::move(task));
     }
+    LOG_INFO(logger, "cpu event loop {} finished", loop_id);
 }
 
 EventLoopPool::EventLoopPool(
@@ -218,6 +223,7 @@ void EventLoopPool::submit(std::vector<PipelineTask> & tasks)
 
 void EventLoopPool::submitCPU(PipelineTask && task)
 {
+    LOG_DEBUG(logger, "submit {} to cpu event loop", task.toString());
     std::lock_guard<std::mutex> lock(global_mutex);
     cpu_event_queue.emplace_back(std::move(task));
     cv.notify_one();
@@ -228,6 +234,7 @@ void EventLoopPool::batchSubmitCPU(std::vector<PipelineTask> & tasks)
     std::lock_guard<std::mutex> lock(global_mutex);
     for (auto & task : tasks)
     {
+        LOG_DEBUG(logger, "submit {} to cpu event loop", task.toString());
         cpu_event_queue.emplace_back(std::move(task));
         cv.notify_one();
     }
@@ -235,6 +242,7 @@ void EventLoopPool::batchSubmitCPU(std::vector<PipelineTask> & tasks)
 
 void EventLoopPool::submitIO(PipelineTask && task)
 {
+    LOG_DEBUG(logger, "submit {} to io event loop", task.toString());
     io_poller.submit(std::move(task));
 }
 
@@ -256,11 +264,13 @@ EventLoopPool::~EventLoopPool()
 
 void EventLoopPool::handleFinishTask(const PipelineTask & task)
 {
+    LOG_INFO(logger, "pipeline task {} finished", task.toString());
     if (auto dag_scheduler = pipeline_manager.getDAGScheduler(task.mpp_task_id); likely(dag_scheduler))
         dag_scheduler->submit(PipelineEvent::finish(task.task_id, task.pipeline_id));
 }
 void EventLoopPool::handleErrTask(const PipelineTask & task, const PipelineTaskResult & result)
 {
+    LOG_INFO(logger, "pipeline task {} occur error", task.toString());
     if (auto dag_scheduler = pipeline_manager.getDAGScheduler(task.mpp_task_id); likely(dag_scheduler))
         dag_scheduler->submit(PipelineEvent::fail(result.err_msg));
 }

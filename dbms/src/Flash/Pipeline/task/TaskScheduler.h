@@ -15,15 +15,17 @@
 #pragma once
 
 #include <Common/Logger.h>
-#include <Flash/Mpp/MPPTaskId.h>
 #include <Flash/Pipeline/task/EventLoopPool.h>
 #include <Server/ServerInfo.h>
-
-#include <functional>
 
 namespace DB
 {
 struct PipelineManager;
+
+class Pipeline;
+using PipelinePtr = std::shared_ptr<Pipeline>;
+
+class Context;
 
 class TaskScheduler
 {
@@ -32,12 +34,12 @@ public:
 
     ~TaskScheduler();
 
-    void submit(std::vector<PipelineTaskPtr> & tasks);
+    void submit(const PipelinePtr & pipeline, Context & context);
 
     void cancel(UInt32 pipeline_id);
 
 private:
-    EventLoopPoolPtr event_loop_pool;
+    EventLoopPool event_loop_pool;
 
     LoggerPtr log = Logger::get("TaskScheduler");
 };

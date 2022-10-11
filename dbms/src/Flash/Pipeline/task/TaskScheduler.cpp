@@ -12,32 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <Flash/Coprocessor/DAGContext.h>
+#include <Flash/Pipeline/dag/Pipeline.h>
 #include <Flash/Pipeline/task/TaskScheduler.h>
 #include <Interpreters/Context.h>
-#include <Storages/Transaction/TMTContext.h>
+#include <common/logger_useful.h>
 
 namespace DB
 {
 TaskScheduler::TaskScheduler(
     PipelineManager & pipeline_manager, 
     const ServerInfo & server_info)
-    : event_loop_pool(std::make_unique<EventLoopPool>(
-        // server_info.cpu_info.logical_cores, 
+    : event_loop_pool(
         server_info.cpu_info.physical_cores, 
-        pipeline_manager))
+        pipeline_manager)
 {}
 
 TaskScheduler::~TaskScheduler()
 {
-    event_loop_pool->finish();
-    event_loop_pool = nullptr;
+    event_loop_pool.finish();
 }
 
-void TaskScheduler::submit(std::vector<PipelineTaskPtr> & tasks)
+void TaskScheduler::submit(const PipelinePtr & pipeline, Context & context)
 {
-    if (unlikely(tasks.empty()))
+    size_t concurrency = std::min(event_loop_pool.concurrency(), context.getMaxStreams());
+    if (0 == concurrency)
         return;
-    event_loop_pool->submit(tasks);
+
+    auto tasks = pipeline->transform(context, concurrency);
+    assert(!tasks.empty());
+    LOG_DEBUG(log, "submit pipeline {} with task num {}", pipeline->toString(), tasks.size());
+    event_loop_pool.submit(tasks);
 }
 } // namespace DB

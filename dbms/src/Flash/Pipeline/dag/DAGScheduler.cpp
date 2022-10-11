@@ -259,9 +259,7 @@ void DAGScheduler::submitPipeline(const PipelinePtr & pipeline)
     if (is_ready_for_run)
     {
         status_machine.stateToRunning(pipeline->getId());
-        auto tasks = pipeline->transform(context, context.getMaxStreams());
-        LOG_DEBUG(log, "submit pipeline {} with task num {}", pipeline->toString(), tasks.size());
-        task_scheduler.submit(tasks);
+        task_scheduler.submit(pipeline, context);
     }
     else
     {

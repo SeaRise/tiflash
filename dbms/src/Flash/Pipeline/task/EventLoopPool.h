@@ -82,5 +82,4 @@ private:
     friend class EventLoop;
     friend class IOPoller;
 };
-using EventLoopPoolPtr = std::unique_ptr<EventLoopPool>;
 } // namespace DB

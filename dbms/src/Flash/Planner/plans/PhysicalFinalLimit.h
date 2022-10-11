@@ -28,7 +28,7 @@ public:
         const String & req_id,
         const Block & sample_block_,
         const LimitBreakerPtr & limit_breaker_)
-        : PhysicalLeaf(executor_id_, PlanType::Limit, schema_, req_id)
+        : PhysicalLeaf(executor_id_, PlanType::FinalLimit, schema_, req_id)
         , sample_block(sample_block_)
         , limit_breaker(limit_breaker_)
     {}

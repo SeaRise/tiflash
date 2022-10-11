@@ -48,26 +48,21 @@ public:
         if (unlikely(!block))
             return false;
 
-        std::lock_guard lock(mutex);
         async_writer->asyncWrite(std::move(block));
         return true;
     }
 
     void finish() override
     {
-        std::lock_guard lock(mutex);
         async_writer->asyncFinishWrite();
     }
 
     bool isIOReady() override
     {
-        std::lock_guard lock(mutex);
         return async_writer->asyncIsReady();
     }
 
 private:
     AsyncWriterPtr async_writer;
-
-    std::mutex mutex;
 };
 } // namespace DB

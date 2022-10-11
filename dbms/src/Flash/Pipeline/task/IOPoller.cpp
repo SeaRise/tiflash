@@ -68,6 +68,33 @@ IOPoller::~IOPoller()
     LOG_INFO(logger, "stop io event loop");
 }
 
+// return true to remove task in blocked_tasks.
+bool IOPoller::handleIOModeTask(std::vector<PipelineTaskPtr> & ready_tasks, PipelineTaskPtr && task)
+{
+    assert(task);
+    try
+    {
+        auto pre_status = task->status;
+        if (task->tryToCpuMode())
+        {
+            if (pre_status == PipelineTaskStatus::io_wait)
+                ready_tasks.emplace_back(std::move(task));
+            else
+            {
+                assert(pre_status == PipelineTaskStatus::io_finishing);
+                pool.handleFinishTask(task);
+            }
+            return true;
+        }
+    }
+    catch (...)
+    {
+        pool.handleErrTask(task, toFail(getCurrentExceptionMessage(true)));
+        return true;
+    }
+    return false;
+}
+
 void IOPoller::ioModeLoop()
 {
     setThreadName("IOPoller");
@@ -108,21 +135,10 @@ void IOPoller::ioModeLoop()
         while (task_it != local_blocked_tasks.end())
         {
             auto & task = *task_it;
-            assert(task);
-
-            auto pre_status = task->status;
-            if (task->tryToCpuMode())
-            {
-                if (pre_status == PipelineTaskStatus::io_wait)
-                    ready_tasks.emplace_back(std::move(task));
-                else
-                    pool.handleFinishTask(task);
+            if (handleIOModeTask(ready_tasks, std::move(task)))
                 task_it = local_blocked_tasks.erase(task_it);
-            }
             else
-            {
                 ++task_it;
-            }
         }
 
         if (ready_tasks.empty())

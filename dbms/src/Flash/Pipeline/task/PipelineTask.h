@@ -46,6 +46,10 @@ struct PipelineTaskResult
     String err_msg;
 };
 
+PipelineTaskResult toFinish();
+PipelineTaskResult toFail(const String & err_msg);
+PipelineTaskResult toRunning();
+
 class PipelineTask
 {
 public:
@@ -90,10 +94,6 @@ private:
     {
         return mem_tracker ? mem_tracker.get() : nullptr;
     }
-
-    static PipelineTaskResult toFinish();
-    static PipelineTaskResult toFail(const String & err_msg);
-    static PipelineTaskResult toRunning();
 
 private:
     LoggerPtr logger;

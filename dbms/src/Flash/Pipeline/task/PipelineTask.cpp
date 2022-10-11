@@ -105,15 +105,15 @@ void PipelineTask::changeStatus(PipelineTaskStatus new_status)
     LOG_DEBUG(logger, "change status: {} -> {}", magic_enum::enum_name(pre_status), magic_enum::enum_name(status));
 }
 
-PipelineTaskResult PipelineTask::toFinish()
+PipelineTaskResult toFinish()
 {
     return PipelineTaskResult{PipelineTaskResultType::finished, ""};
 }
-PipelineTaskResult PipelineTask::toFail(const String & err_msg)
+PipelineTaskResult toFail(const String & err_msg)
 {
     return PipelineTaskResult{PipelineTaskResultType::error, err_msg};
 }
-PipelineTaskResult PipelineTask::toRunning()
+PipelineTaskResult toRunning()
 {
     return PipelineTaskResult{PipelineTaskResultType::running, ""};
 }

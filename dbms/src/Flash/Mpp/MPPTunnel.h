@@ -76,12 +76,12 @@ public:
 
     virtual MPMCQueueResult nativePush(const mpp::MPPDataPacket & data)
     {
-        return send_queue.push(std::make_shared<TrackedMppDataPacket>(data, getMemoryTracker()));
+        return send_queue.tryPush(std::make_shared<TrackedMppDataPacket>(data, getMemoryTracker()));
     }
 
     virtual bool push(const mpp::MPPDataPacket & data)
     {
-        return nativePush(data) == MPMCQueueResult::OK;
+        return send_queue.push(std::make_shared<TrackedMppDataPacket>(data, getMemoryTracker())) == MPMCQueueResult::OK;
     }
 
     virtual void cancelWith(const String & reason)

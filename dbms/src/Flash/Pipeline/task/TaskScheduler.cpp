@@ -34,7 +34,7 @@ TaskScheduler::~TaskScheduler()
     event_loop_pool = nullptr;
 }
 
-void TaskScheduler::submit(std::vector<PipelineTask> & tasks)
+void TaskScheduler::submit(std::vector<PipelineTaskPtr> & tasks)
 {
     if (unlikely(tasks.empty()))
         return;

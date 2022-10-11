@@ -32,7 +32,7 @@ public:
 
     ~TaskScheduler();
 
-    void submit(std::vector<PipelineTask> & tasks);
+    void submit(std::vector<PipelineTaskPtr> & tasks);
 
     void cancel(UInt32 pipeline_id);
 

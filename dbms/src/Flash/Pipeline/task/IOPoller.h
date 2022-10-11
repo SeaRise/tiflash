@@ -29,8 +29,8 @@ class IOPoller
 public:
     explicit IOPoller(EventLoopPool & pool_);
     void finish();
-    void submit(PipelineTask && task);
-    void submit(std::vector<PipelineTask> & tasks);
+    void submit(PipelineTaskPtr && task);
+    void submit(std::vector<PipelineTaskPtr> & tasks);
     ~IOPoller();
 private:
     void ioModeLoop();
@@ -40,7 +40,7 @@ private:
 
     EventLoopPool & pool;
 
-    std::list<PipelineTask> blocked_tasks;
+    std::list<PipelineTaskPtr> blocked_tasks;
     std::thread io_thread;
 
     std::atomic<bool> is_shutdown{false};

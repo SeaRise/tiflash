@@ -18,6 +18,8 @@
 #include <Flash/Mpp/MPPTaskId.h>
 #include <Transforms/Transforms.h>
 
+#include <memory>
+
 namespace DB
 {
 enum class PipelineTaskStatus
@@ -26,7 +28,9 @@ enum class PipelineTaskStatus
     cpu_run,
     // io mode
     io_wait,
-    io_finish,
+    io_finishing,
+    // finish
+    finish,
 };
 
 enum class PipelineTaskResultType
@@ -45,8 +49,6 @@ struct PipelineTaskResult
 class PipelineTask
 {
 public:
-    PipelineTask() = default;
-
     PipelineTask(
         UInt32 task_id_,
         UInt32 pipeline_id_,
@@ -57,44 +59,21 @@ public:
         , mpp_task_id(mpp_task_id_)
         , transforms(transforms_)
         , mem_tracker(current_memory_tracker ? current_memory_tracker->shared_from_this() : nullptr)
+        , logger(Logger::get("PipelineTask", fmt::format("{{mpp_task_id: {}, pipeline_id: {}, task_id: {}}}", mpp_task_id.toString(), pipeline_id, task_id)))
     {}
-
-    PipelineTask(PipelineTask && task)
-        : task_id(std::move(task.task_id))
-        , pipeline_id(std::move(task.pipeline_id))
-        , mpp_task_id(std::move(task.mpp_task_id))
-        , transforms(std::move(task.transforms))
-        , status(std::move(task.status))
-        , mem_tracker(std::move(task.mem_tracker))
-    {}
-
-    PipelineTask & operator=(PipelineTask && task)
-    {
-        if (this != &task)
-        {
-            task_id = std::move(task.task_id);
-            pipeline_id = std::move(task.pipeline_id);
-            mpp_task_id = std::move(task.mpp_task_id);
-            transforms = std::move(task.transforms);
-            status = std::move(task.status);
-            mem_tracker = std::move(task.mem_tracker);
-        }
-        return *this;
-    }
 
     void prepare();
 
     PipelineTaskResult execute();
 
-    MemoryTracker * getMemTracker()
-    {
-        return mem_tracker ? mem_tracker.get() : nullptr;
-    }
+    void finish();
 
     bool tryToCpuMode();
     bool tryToIOMode();
 
     String toString() const;
+
+    void changeStatus(PipelineTaskStatus new_status);
 
 public:
     UInt32 task_id;
@@ -107,8 +86,18 @@ public:
     std::shared_ptr<MemoryTracker> mem_tracker;
 
 private:
-    static PipelineTaskResult finish();
-    static PipelineTaskResult fail(const String & err_msg);
-    static PipelineTaskResult running();
+    MemoryTracker * getMemTracker()
+    {
+        return mem_tracker ? mem_tracker.get() : nullptr;
+    }
+
+    static PipelineTaskResult toFinish();
+    static PipelineTaskResult toFail(const String & err_msg);
+    static PipelineTaskResult toRunning();
+
+private:
+    LoggerPtr logger;
 };
+
+using PipelineTaskPtr = std::unique_ptr<PipelineTask>;
 } // namespace DB

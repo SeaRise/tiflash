@@ -16,22 +16,23 @@
 #include <Common/Exception.h>
 #include <Common/MemoryTrackerSetter.h>
 #include <Flash/Pipeline/task/PipelineTask.h>
+#include <magic_enum.hpp>
 
 namespace DB
 {
 String PipelineTask::toString() const
 {
-    return fmt::format("{{task_id: {}, pipeline_id: {}, mpp_task_id: {}}}", task_id, pipeline_id, mpp_task_id.toString());
+    return fmt::format("{{mpp_task_id: {}, pipeline_id: {}, task_id: {}}}", mpp_task_id.toString(), pipeline_id, task_id);
 }
 
 // must in io mode.
 bool PipelineTask::tryToCpuMode()
 {
     MemoryTrackerSetter setter(true, getMemTracker());
-    assert(status == PipelineTaskStatus::io_wait || status == PipelineTaskStatus::io_finish);
+    assert(status == PipelineTaskStatus::io_wait || status == PipelineTaskStatus::io_finishing);
     if (transforms->isIOReady())
     {
-        status = PipelineTaskStatus::cpu_run;
+        changeStatus(PipelineTaskStatus::cpu_run);
         return true;
     }
     return false;
@@ -43,7 +44,7 @@ bool PipelineTask::tryToIOMode()
     assert(status == PipelineTaskStatus::cpu_run);
     if (!transforms->isIOReady())
     {
-        status = PipelineTaskStatus::io_wait;
+        changeStatus(PipelineTaskStatus::io_wait);
         return true;
     }
     return false;
@@ -69,38 +70,50 @@ PipelineTaskResult PipelineTask::execute()
             {
                 transforms->finish();
                 if (!transforms->isIOReady())
-                    status = PipelineTaskStatus::io_finish;
-                return finish();
+                    changeStatus(PipelineTaskStatus::io_finishing);
+                return toFinish();
             }
             else if (!transforms->isIOReady())
             {
-                status = PipelineTaskStatus::io_wait;
-                return running();
+                changeStatus(PipelineTaskStatus::io_wait);
+                return toRunning();
             }
             else
             {
                 time_spent += stopwatch.elapsed();
                 static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
                 if (time_spent >= YIELD_MAX_TIME_SPENT)
-                    return running();
+                    return toRunning();
             }
         }
     }
     catch (...)
     {
-        return fail(getCurrentExceptionMessage(true));
+        return toFail(getCurrentExceptionMessage(true));
     }
 }
 
-PipelineTaskResult PipelineTask::finish()
+void PipelineTask::finish()
+{
+    changeStatus(PipelineTaskStatus::finish);
+}
+
+void PipelineTask::changeStatus(PipelineTaskStatus new_status)
+{
+    auto pre_status = status;
+    status = new_status;
+    LOG_DEBUG(logger, "change status: {} -> {}", magic_enum::enum_name(pre_status), magic_enum::enum_name(status));
+}
+
+PipelineTaskResult PipelineTask::toFinish()
 {
     return PipelineTaskResult{PipelineTaskResultType::finished, ""};
 }
-PipelineTaskResult PipelineTask::fail(const String & err_msg)
+PipelineTaskResult PipelineTask::toFail(const String & err_msg)
 {
     return PipelineTaskResult{PipelineTaskResultType::error, err_msg};
 }
-PipelineTaskResult PipelineTask::running()
+PipelineTaskResult PipelineTask::toRunning()
 {
     return PipelineTaskResult{PipelineTaskResultType::running, ""};
 }

@@ -74,6 +74,7 @@ public:
 
     bool isIOReady() override
     {
+        RUNTIME_ASSERT(task_pool_added);
         if (done || io_block)
             return true;
         while (true)
@@ -83,21 +84,16 @@ public:
                 return false;
             if (res)
             {
-                if (!res.rows())
-                {
+                if (res.rows() == 0)
                     continue;
-                }
                 else
-                {
                     io_block = std::move(res);
-                    return true;
-                }
             }
             else
             {
                 done = true;
-                return true;
             }
+            return true;
         }
     }
 
@@ -114,10 +110,7 @@ public:
 private:
     void addReadTaskPoolToScheduler()
     {
-        if (likely(task_pool_added))
-        {
-            return;
-        }
+        RUNTIME_ASSERT(!task_pool_added);
         std::call_once(task_pool->addToSchedulerFlag(), [&]() { DM::SegmentReadTaskScheduler::instance().add(task_pool); });
         task_pool_added = true;
     }

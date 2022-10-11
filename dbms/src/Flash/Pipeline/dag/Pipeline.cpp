@@ -41,16 +41,17 @@ Pipeline::Pipeline(
     LOG_FMT_DEBUG(log, "pipeline plan node:\n{}", PhysicalPlanVisitor::visitToString(plan_node));
 }
 
-std::vector<PipelineTask> Pipeline::transform(Context & context, size_t concurrency)
+std::vector<PipelineTaskPtr> Pipeline::transform(Context & context, size_t concurrency)
 {
     assert(plan_node);
     TransformsPipeline pipeline;
     plan_node->transform(pipeline, context, concurrency);
 
-    std::vector<PipelineTask> tasks;
+    std::vector<PipelineTaskPtr> tasks;
+    tasks.reserve(pipeline.concurrency());
     for (const auto & transforms : pipeline.transforms_vec)
     {
-        tasks.emplace_back(active_task_num++, id, mpp_task_id, transforms);
+        tasks.emplace_back(std::make_unique<PipelineTask>(active_task_num++, id, mpp_task_id, transforms));
         task_transforms_vec.push_back(transforms);
     }
     return tasks;

@@ -36,7 +36,7 @@ DAGScheduler::DAGScheduler(
     , task_scheduler(*context.getTMTContext().getMPPTaskManager()->getPipelineManager().task_scheduler)
 {}
 
-void DAGScheduler::submit(PipelineEvent && event)
+void DAGScheduler::submit(PipelineEventPtr && event)
 {
     event_queue.submit(std::move(event));
 }
@@ -53,7 +53,7 @@ std::pair<bool, String> DAGScheduler::run(
 
     submitPipeline(final_pipeline);
 
-    PipelineEvent event;
+    PipelineEventPtr event;
     String err_msg;
     EventQueueStatus event_queue_status;
     while (true)
@@ -62,7 +62,8 @@ std::pair<bool, String> DAGScheduler::run(
         if (unlikely(event_queue_status != EventQueueStatus::running))
             break;
     
-        switch (event.type)
+        assert(event);
+        switch (event->type)
         {
         case PipelineEventType::finish:
             handlePipelineFinish(event);
@@ -101,11 +102,11 @@ void DAGScheduler::cancel(bool is_kill)
     submit(PipelineEvent::cancel(is_kill));
 }
 
-void DAGScheduler::handlePipelineCancel(const PipelineEvent & event)
+void DAGScheduler::handlePipelineCancel(const PipelineEventPtr & event)
 {
-    assert(event.type == PipelineEventType::cancel);
+    assert(event->type == PipelineEventType::cancel);
     event_queue.cancel();
-    cancelRunningPipelines(event.is_kill);
+    cancelRunningPipelines(event->is_kill);
     status_machine.finish();
 }
 
@@ -116,26 +117,26 @@ void DAGScheduler::cancelRunningPipelines(bool is_kill)
         running_pipeline->cancel(is_kill);
 }
 
-String DAGScheduler::handlePipelineFail(const PipelineEvent & event)
+String DAGScheduler::handlePipelineFail(const PipelineEventPtr & event)
 {
-    assert(event.type == PipelineEventType::fail);
+    assert(event->type == PipelineEventType::fail);
     event_queue.cancel();
     cancelRunningPipelines(false);
     status_machine.finish();
-    return event.err_msg;
+    return event->err_msg;
 }
 
-void DAGScheduler::handlePipelineFinish(const PipelineEvent & event)
+void DAGScheduler::handlePipelineFinish(const PipelineEventPtr & event)
 {
-    assert(event.type == PipelineEventType::finish);
-    auto pipeline = status_machine.getPipeline(event.pipeline_id);
-    pipeline->finish(event.task_id);
+    assert(event->type == PipelineEventType::finish);
+    auto pipeline = status_machine.getPipeline(event->pipeline_id);
+    pipeline->finish(event->task_id);
     if (pipeline->active_task_num == 0)
     {
         LOG_DEBUG(log, "pipeline {} finished", pipeline->toString());
-        status_machine.stateToComplete(event.pipeline_id);
+        status_machine.stateToComplete(event->pipeline_id);
         pipeline->finish();
-        if (event.pipeline_id == final_pipeline_id)
+        if (event->pipeline_id == final_pipeline_id)
         {
             event_queue.finish();
             status_machine.finish();

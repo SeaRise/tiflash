@@ -56,7 +56,7 @@ public:
 
     const MPPTaskId & getMPPTaskId() const { return mpp_task_id; }
 
-    void submit(PipelineEvent && event);
+    void submit(PipelineEventPtr && event);
 
 private:
     PipelinePtr genPipeline(const PhysicalPlanNodePtr & plan_node);
@@ -69,11 +69,11 @@ private:
 
     void submitNext(const PipelinePtr & pipeline);
 
-    void handlePipelineFinish(const PipelineEvent & event);
+    void handlePipelineFinish(const PipelineEventPtr & event);
 
-    String handlePipelineFail(const PipelineEvent & event);
+    String handlePipelineFail(const PipelineEventPtr & event);
 
-    void handlePipelineCancel(const PipelineEvent & event);
+    void handlePipelineCancel(const PipelineEventPtr & event);
 
     void cancelRunningPipelines(bool is_kill);
 

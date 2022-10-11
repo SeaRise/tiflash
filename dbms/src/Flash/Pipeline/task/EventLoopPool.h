@@ -31,7 +31,7 @@ public:
         EventLoopPool & pool_);
     ~EventLoop();
 private:
-    void handleCpuModeTask(PipelineTask && task);
+    void handleCpuModeTask(PipelineTaskPtr && task);
     void cpuModeLoop();
 private:
     size_t loop_id;
@@ -51,20 +51,20 @@ public:
 
     void finish();
 
-    void submit(std::vector<PipelineTask> & tasks);
+    void submit(std::vector<PipelineTaskPtr> & tasks);
 
     size_t concurrency() const { return cpu_loops.size(); }
 
     ~EventLoopPool();
 
 private:
-    void submitCPU(PipelineTask && task);
-    void submitCPU(std::vector<PipelineTask> & tasks);
+    void submitCPU(PipelineTaskPtr && task);
+    void submitCPU(std::vector<PipelineTaskPtr> & tasks);
 
-    bool popTask(PipelineTask & task);
+    bool popTask(PipelineTaskPtr & task);
 
-    void handleFinishTask(const PipelineTask & task);
-    void handleErrTask(const PipelineTask & task, const PipelineTaskResult & result);
+    void handleFinishTask(const PipelineTaskPtr & task);
+    void handleErrTask(const PipelineTaskPtr & task, const PipelineTaskResult & result);
 private:
     PipelineManager & pipeline_manager;
 
@@ -73,7 +73,7 @@ private:
     mutable std::mutex global_mutex;
     std::condition_variable cv;
     bool is_closed = false;
-    std::deque<PipelineTask> cpu_event_queue;
+    std::deque<PipelineTaskPtr> cpu_event_queue;
 
     std::vector<EventLoopPtr> cpu_loops;
 

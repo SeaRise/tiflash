@@ -32,26 +32,30 @@ void IOPoller::finish()
     }
 }
 
-void IOPoller::submit(PipelineTask && task)
+void IOPoller::submit(PipelineTaskPtr && task)
 {
+    assert(task);
     {
         std::lock_guard lock(mutex);
         blocked_tasks.emplace_back(std::move(task));
     }
     cond.notify_one();
-    LOG_DEBUG(logger, "submit {} to io event loop", task.toString());
+    LOG_DEBUG(logger, "submit {} to io event loop", task->toString());
 }
 
-void IOPoller::submit(std::vector<PipelineTask> & tasks)
+void IOPoller::submit(std::vector<PipelineTaskPtr> & tasks)
 {
     if (tasks.empty())
         return;
     {
         std::lock_guard<std::mutex> lock(mutex);
-        for (auto & task : tasks)
+        while (!tasks.empty())
         {
-            LOG_DEBUG(logger, "submit {} to io event loop", task.toString());
+            auto & task = tasks.back();
+            assert(task);
+            LOG_DEBUG(logger, "submit {} to io event loop", task->toString());
             blocked_tasks.emplace_back(std::move(task));
+            tasks.pop_back();
         }
     }
     cond.notify_one();
@@ -67,9 +71,9 @@ void IOPoller::ioModeLoop()
 {
     setThreadName("IOPoller");
     LOG_INFO(logger, "start io event loop");
-    std::list<PipelineTask> local_blocked_tasks;
+    std::list<PipelineTaskPtr> local_blocked_tasks;
     int spin_count = 0;
-    std::vector<PipelineTask> ready_tasks;
+    std::vector<PipelineTaskPtr> ready_tasks;
     while (!is_shutdown.load(std::memory_order_acquire))
     {
         {
@@ -93,9 +97,10 @@ void IOPoller::ioModeLoop()
         auto task_it = local_blocked_tasks.begin();
         while (task_it != local_blocked_tasks.end()) {
             auto & task = *task_it;
+            assert(task);
 
-            auto pre_status = task.status;
-            if (task.tryToCpuMode())
+            auto pre_status = task->status;
+            if (task->tryToCpuMode())
             {
                 if (pre_status == PipelineTaskStatus::io_wait)
                     ready_tasks.emplace_back(std::move(task));

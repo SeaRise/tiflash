@@ -33,7 +33,7 @@ public:
         const std::unordered_set<UInt32> & parent_ids_,
         const String & req_id);
 
-    std::vector<PipelineTask> transform(Context & context, size_t concurrency);
+    std::vector<PipelineTaskPtr> transform(Context & context, size_t concurrency);
 
     UInt32 getId() const { return id; }
     const std::unordered_set<UInt32> & getParentIds() const { return parent_ids; }

@@ -31,9 +31,9 @@ enum class EventQueueStatus
 class EventQueue
 {
 public:
-    void submit(PipelineEventPtr && event);
+    void submit(PipelineEvent && event);
 
-    EventQueueStatus pop(PipelineEventPtr & event);
+    EventQueueStatus pop(PipelineEvent & event);
 
     void finish();
 
@@ -42,7 +42,7 @@ public:
 private:
     mutable std::mutex mutex;
     std::condition_variable cond;
-    std::list<PipelineEventPtr> queue;
+    std::list<PipelineEvent> queue;
 
     EventQueueStatus status = EventQueueStatus::running;
 };

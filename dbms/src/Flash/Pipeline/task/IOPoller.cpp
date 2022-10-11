@@ -26,7 +26,8 @@ IOPoller::IOPoller(EventLoopPool & pool_): pool(pool_)
 
 void IOPoller::finish()
 {
-    if (this->is_shutdown.load() == false) {
+    if (this->is_shutdown.load() == false)
+    {
         this->is_shutdown.store(true, std::memory_order_release);
         cond.notify_one();
     }
@@ -35,12 +36,12 @@ void IOPoller::finish()
 void IOPoller::submit(PipelineTaskPtr && task)
 {
     assert(task);
+    LOG_DEBUG(logger, "submit {} to io event loop", task->toString());
     {
         std::lock_guard lock(mutex);
         blocked_tasks.emplace_back(std::move(task));
     }
     cond.notify_one();
-    LOG_DEBUG(logger, "submit {} to io event loop", task->toString());
 }
 
 void IOPoller::submit(std::vector<PipelineTaskPtr> & tasks)
@@ -76,26 +77,36 @@ void IOPoller::ioModeLoop()
     std::vector<PipelineTaskPtr> ready_tasks;
     while (!is_shutdown.load(std::memory_order_acquire))
     {
+        if (local_blocked_tasks.empty())
+        {
+            std::unique_lock<std::mutex> lock(mutex);
+            while (!is_shutdown.load(std::memory_order_acquire) && this->blocked_tasks.empty())
+                cond.wait(lock);
+            if (is_shutdown.load(std::memory_order_acquire))
+                break;
+            assert(!this->blocked_tasks.empty());
+            local_blocked_tasks.splice(local_blocked_tasks.end(), blocked_tasks);
+        }
+        else
         {
             std::unique_lock<std::mutex> lock(mutex);
             local_blocked_tasks.splice(local_blocked_tasks.end(), blocked_tasks);
-            if (local_blocked_tasks.empty() && blocked_tasks.empty()) {
+            if (local_blocked_tasks.empty() && blocked_tasks.empty())
+            {
                 std::cv_status cv_status = std::cv_status::no_timeout;
-                while (!is_shutdown.load(std::memory_order_acquire) && this->blocked_tasks.empty()) {
+                while (!is_shutdown.load(std::memory_order_acquire) && this->blocked_tasks.empty())
                     cv_status = cond.wait_for(lock, std::chrono::milliseconds(10));
-                }
-                if (cv_status == std::cv_status::timeout) {
+                if (cv_status == std::cv_status::timeout)
                     continue;
-                }
-                if (is_shutdown.load(std::memory_order_acquire)) {
+                if (is_shutdown.load(std::memory_order_acquire))
                     break;
-                }
                 local_blocked_tasks.splice(local_blocked_tasks.end(), blocked_tasks);
             }
         }
 
         auto task_it = local_blocked_tasks.begin();
-        while (task_it != local_blocked_tasks.end()) {
+        while (task_it != local_blocked_tasks.end())
+        {
             auto & task = *task_it;
             assert(task);
 
@@ -114,15 +125,19 @@ void IOPoller::ioModeLoop()
             }
         }
 
-        if (ready_tasks.empty()) {
+        if (ready_tasks.empty())
+        {
             spin_count += 1;
-        } else {
+        }
+        else
+        {
             spin_count = 0;
             pool.submitCPU(ready_tasks);
             ready_tasks.clear();
         }
 
-        if (spin_count != 0 && spin_count % 64 == 0) {
+        if (spin_count != 0 && spin_count % 64 == 0)
+        {
 #ifdef __x86_64__
             _mm_pause();
 #else
@@ -130,7 +145,8 @@ void IOPoller::ioModeLoop()
             sched_yield();
 #endif
         }
-        if (spin_count == 640) {
+        if (spin_count == 640)
+        {
             spin_count = 0;
             sched_yield();
         }

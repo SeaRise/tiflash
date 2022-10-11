@@ -27,30 +27,29 @@ enum class PipelineEventType
     cancel,
 };
 
-struct PipelineEvent;
-using PipelineEventPtr = std::unique_ptr<PipelineEvent>;
-
 struct PipelineEvent
 {
-    static PipelineEventPtr finish(UInt32 task_id, UInt32 pipeline_id)
+    static PipelineEvent finish(UInt32 task_id, UInt32 pipeline_id)
     {
-        return std::make_unique<PipelineEvent>(task_id, pipeline_id, "", false, PipelineEventType::finish);
+        return {task_id, pipeline_id, "", false, PipelineEventType::finish};
     }
 
-    static PipelineEventPtr fail(UInt32 task_id, UInt32 pipeline_id, const String & err_msg)
+    static PipelineEvent fail(UInt32 task_id, UInt32 pipeline_id, const String & err_msg)
     {
-        return std::make_unique<PipelineEvent>(task_id, pipeline_id, err_msg, false, PipelineEventType::fail);
+        return {task_id, pipeline_id, err_msg, false, PipelineEventType::fail};
     }
 
-    static PipelineEventPtr fail(const String & err_msg)
+    static PipelineEvent fail(const String & err_msg)
     {
         return fail(0, 0, err_msg);
     }
 
-    static PipelineEventPtr cancel(bool is_kill)
+    static PipelineEvent cancel(bool is_kill)
     {
-        return std::make_unique<PipelineEvent>(0, 0, "", is_kill, PipelineEventType::cancel);
+        return {0, 0, "", is_kill, PipelineEventType::cancel};
     }
+
+    PipelineEvent() = default;
 
     PipelineEvent(
         UInt32 task_id_,
@@ -64,6 +63,27 @@ struct PipelineEvent
         , is_kill(is_kill_)
         , type(type_)
     {}
+
+    PipelineEvent(PipelineEvent && event)
+        : task_id(std::move(event.task_id))
+        , pipeline_id(std::move(event.pipeline_id))
+        , err_msg(std::move(event.err_msg))
+        , is_kill(event.is_kill)
+        , type(std::move(event.type))
+    {}
+
+    PipelineEvent & operator=(PipelineEvent && event)
+    {
+        if (this != &event)
+        {
+            task_id = std::move(event.task_id);
+            pipeline_id = std::move(event.pipeline_id);
+            err_msg = std::move(event.err_msg);
+            is_kill = event.is_kill;
+            type = std::move(event.type);
+        }
+        return *this;
+    }
 
     UInt32 task_id;
     UInt32 pipeline_id;

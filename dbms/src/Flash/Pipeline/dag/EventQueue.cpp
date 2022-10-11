@@ -16,7 +16,7 @@
 
 namespace DB
 {
-void EventQueue::submit(PipelineEventPtr && event)
+void EventQueue::submit(PipelineEvent && event)
 {
     {
         std::unique_lock lock(mutex);
@@ -27,7 +27,7 @@ void EventQueue::submit(PipelineEventPtr && event)
     cond.notify_one();
 }
 
-EventQueueStatus EventQueue::pop(PipelineEventPtr & event)
+EventQueueStatus EventQueue::pop(PipelineEvent & event)
 {
     {
         std::unique_lock lock(mutex);

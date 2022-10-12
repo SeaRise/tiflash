@@ -16,7 +16,7 @@
 #include <Common/Exception.h>
 #include <Common/MemoryTrackerSetter.h>
 #include <Flash/Pipeline/task/PipelineTask.h>
-#include <Flash/Pipeline/dag/PipelineEventQueue.h>
+#include <Flash/Pipeline/dag/PipelineSignal.h>
 #include <magic_enum.hpp>
 
 namespace DB
@@ -52,7 +52,7 @@ bool PipelineTask::tryToCpuMode()
     }
     catch (...)
     {
-        occurErr(getCurrentExceptionMessage(true));
+        error(getCurrentExceptionMessage(true));
         return true;
     }
     return false;
@@ -116,20 +116,20 @@ void PipelineTask::execute()
     }
     catch (...)
     {
-        occurErr(getCurrentExceptionMessage(true));
+        error(getCurrentExceptionMessage(true));
     }
 }
 
 void PipelineTask::finish()
 {
     changeStatus(PipelineTaskStatus::finish);
-    event_queue->submit(PipelineEvent::finish(task_id, pipeline_id));
+    signal->finish();
 }
 
-void PipelineTask::occurErr(const String & err_msg)
+void PipelineTask::error(const String & err_msg)
 {
     changeStatus(PipelineTaskStatus::error);
-    event_queue->submitFirst(PipelineEvent::fail(err_msg));
+    signal->error(err_msg);
 }
 
 void PipelineTask::cancel()

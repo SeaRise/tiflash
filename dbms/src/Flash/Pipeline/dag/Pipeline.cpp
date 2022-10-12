@@ -18,6 +18,7 @@
 #include <Interpreters/Context.h>
 #include <Transforms/TransformsPipeline.h>
 #include <Flash/Pipeline/dag/PipelineEventQueue.h>
+#include <Flash/Pipeline/dag/PipelineSignal.h>
 
 namespace DB
 {
@@ -53,11 +54,11 @@ std::vector<PipelineTaskPtr> Pipeline::transform(Context & context, size_t concu
 
     std::vector<PipelineTaskPtr> tasks;
     tasks.reserve(pipeline.concurrency());
+    UInt16 active_task_num = pipeline.concurrency();
+    auto signal = std::make_shared<PipelineSignal>(id, active_task_num, event_queue);
     for (const auto & transforms : pipeline.transforms_vec)
-    {
-        tasks.emplace_back(std::make_unique<PipelineTask>(active_task_num++, id, mpp_task_id, transforms, event_queue));
-        task_transforms_vec.push_back(transforms);
-    }
+        tasks.emplace_back(std::make_unique<PipelineTask>(--active_task_num, id, mpp_task_id, transforms, signal));
+    task_transforms_vec = pipeline.transforms_vec;
     event_queue = nullptr;
     return tasks;
 }
@@ -70,14 +71,6 @@ void Pipeline::cancel(bool is_kill)
             transforms->cancel(is_kill);
     }
     task_transforms_vec.clear();
-}
-
-void Pipeline::finish(size_t task_id)
-{
-    assert(active_task_num > 0);
-    assert(!task_transforms_vec.empty());
-    --active_task_num;
-    task_transforms_vec[task_id] = nullptr;
 }
 
 void Pipeline::finish()

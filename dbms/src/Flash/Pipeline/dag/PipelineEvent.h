@@ -29,44 +29,41 @@ enum class PipelineEventType
 
 struct PipelineEvent
 {
-    static PipelineEvent finish(UInt32 task_id, UInt32 pipeline_id)
+    static PipelineEvent finish(UInt32 pipeline_id)
     {
-        return {task_id, pipeline_id, "", false, PipelineEventType::finish};
+        return {pipeline_id, "", false, PipelineEventType::finish};
     }
 
-    static PipelineEvent fail(UInt32 task_id, UInt32 pipeline_id, const String & err_msg)
+    static PipelineEvent fail(UInt32 pipeline_id, const String & err_msg)
     {
-        return {task_id, pipeline_id, err_msg, false, PipelineEventType::fail};
+        return {pipeline_id, err_msg, false, PipelineEventType::fail};
     }
 
     static PipelineEvent fail(const String & err_msg)
     {
-        return fail(0, 0, err_msg);
+        return fail(0, err_msg);
     }
 
     static PipelineEvent cancel(bool is_kill)
     {
-        return {0, 0, "", is_kill, PipelineEventType::cancel};
+        return {0, "", is_kill, PipelineEventType::cancel};
     }
 
     PipelineEvent() = default;
 
     PipelineEvent(
-        UInt32 task_id_,
         UInt32 pipeline_id_,
         const String & err_msg_,
         bool is_kill_,
         PipelineEventType type_)
-        : task_id(task_id_)
-        , pipeline_id(pipeline_id_)
+        : pipeline_id(pipeline_id_)
         , err_msg(err_msg_)
         , is_kill(is_kill_)
         , type(type_)
     {}
 
     PipelineEvent(PipelineEvent && event)
-        : task_id(std::move(event.task_id))
-        , pipeline_id(std::move(event.pipeline_id))
+        : pipeline_id(std::move(event.pipeline_id))
         , err_msg(std::move(event.err_msg))
         , is_kill(event.is_kill)
         , type(std::move(event.type))
@@ -76,7 +73,6 @@ struct PipelineEvent
     {
         if (this != &event)
         {
-            task_id = std::move(event.task_id);
             pipeline_id = std::move(event.pipeline_id);
             err_msg = std::move(event.err_msg);
             is_kill = event.is_kill;
@@ -85,7 +81,6 @@ struct PipelineEvent
         return *this;
     }
 
-    UInt32 task_id;
     UInt32 pipeline_id;
     String err_msg;
     bool is_kill;

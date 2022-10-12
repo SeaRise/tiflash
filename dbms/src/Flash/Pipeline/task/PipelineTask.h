@@ -35,8 +35,8 @@ enum class PipelineTaskStatus
     cancelled,
 };
 
-class PipelineEventQueue;
-using PipelineEventQueuePtr = std::shared_ptr<PipelineEventQueue>;
+class PipelineSignal;
+using PipelineSignalPtr = std::shared_ptr<PipelineSignal>;
 
 class PipelineTask
 {
@@ -46,12 +46,12 @@ public:
         UInt32 pipeline_id_,
         const MPPTaskId & mpp_task_id_,
         const TransformsPtr & transforms_,
-        const PipelineEventQueuePtr & event_queue_)
+        const PipelineSignalPtr & signal_)
         : task_id(task_id_)
         , pipeline_id(pipeline_id_)
         , mpp_task_id(mpp_task_id_)
         , transforms(transforms_)
-        , event_queue(event_queue_)
+        , signal(signal_)
         , mem_tracker(current_memory_tracker ? current_memory_tracker->shared_from_this() : nullptr)
         , logger(Logger::get("PipelineTask", fmt::format("{{mpp_task_id: {}, pipeline_id: {}, task_id: {}}}", mpp_task_id.toString(), pipeline_id, task_id)))
     {}
@@ -70,7 +70,7 @@ public:
 
 private:
     void finish();
-    void occurErr(const String & err_msg);
+    void error(const String & err_msg);
     void cancel();
 
     void changeStatus(PipelineTaskStatus new_status);
@@ -86,7 +86,7 @@ private:
     MPPTaskId mpp_task_id;
 
     TransformsPtr transforms;
-    PipelineEventQueuePtr event_queue;
+    PipelineSignalPtr signal;
     std::shared_ptr<MemoryTracker> mem_tracker;
     LoggerPtr logger;
 };

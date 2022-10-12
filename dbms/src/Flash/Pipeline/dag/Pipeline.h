@@ -45,14 +45,9 @@ public:
     void cancel(bool is_kill);
     void finish();
 
-    void finish(size_t task_id);
-
     PhysicalPlanNodePtr getPlanNode() const { return plan_node; }
 
     String toString() const;
-
-public:
-    size_t active_task_num = 0;
 
 private:
     PhysicalPlanNodePtr plan_node;

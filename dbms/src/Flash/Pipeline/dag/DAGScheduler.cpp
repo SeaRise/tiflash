@@ -128,21 +128,17 @@ void DAGScheduler::handlePipelineFinish(const PipelineEvent & event)
 {
     assert(event.type == PipelineEventType::finish);
     auto pipeline = status_machine.getPipeline(event.pipeline_id);
-    pipeline->finish(event.task_id);
-    if (pipeline->active_task_num == 0)
+    LOG_DEBUG(log, "pipeline {} finished", pipeline->toString());
+    status_machine.stateToComplete(event.pipeline_id);
+    pipeline->finish();
+    if (event.pipeline_id == final_pipeline_id)
     {
-        LOG_DEBUG(log, "pipeline {} finished", pipeline->toString());
-        status_machine.stateToComplete(event.pipeline_id);
-        pipeline->finish();
-        if (event.pipeline_id == final_pipeline_id)
-        {
-            event_queue->finish();
-            status_machine.finish();
-        }
-        else
-        {
-            submitNext(pipeline);
-        }
+        event_queue->finish();
+        status_machine.finish();
+    }
+    else
+    {
+        submitNext(pipeline);
     }
 }
 

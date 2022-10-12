@@ -17,12 +17,10 @@
 #include <Flash/Executor/QueryExecutor.h>
 #include <Flash/Planner/PhysicalPlanNode.h>
 #include <Interpreters/ProcessList.h>
+#include <Flash/Pipeline/dag/DAGScheduler.h>
 
 namespace DB
 {
-class DAGScheduler;
-using DAGSchedulerPtr = std::shared_ptr<DAGScheduler>;
-
 class PipelineExecutor : public QueryExecutor
 {
 public:
@@ -31,8 +29,6 @@ public:
         const PhysicalPlanNodePtr & plan_node_,
         const String & req_id,
         std::shared_ptr<ProcessListEntry> process_list_entry_);
-
-    ~PipelineExecutor();
 
     String dump() const override;
 
@@ -49,7 +45,7 @@ protected:
       */
     std::shared_ptr<ProcessListEntry> process_list_entry;
 
-    DAGSchedulerPtr dag_scheduler;
+    DAGScheduler dag_scheduler;
 
     PhysicalPlanNodePtr plan_node;
 

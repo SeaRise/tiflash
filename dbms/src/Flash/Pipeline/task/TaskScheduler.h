@@ -20,8 +20,6 @@
 
 namespace DB
 {
-struct PipelineManager;
-
 class Pipeline;
 using PipelinePtr = std::shared_ptr<Pipeline>;
 
@@ -30,7 +28,7 @@ class Context;
 class TaskScheduler
 {
 public:
-    TaskScheduler(PipelineManager & pipeline_manager_, const ServerInfo & server_info);
+    explicit TaskScheduler(const ServerInfo & server_info);
 
     ~TaskScheduler();
 

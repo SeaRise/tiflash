@@ -31,7 +31,7 @@ extern const char random_task_manager_find_task_failure_failpoint[];
 
 MPPTaskManager::MPPTaskManager(MPPTaskSchedulerPtr scheduler_, const ServerInfo & server_info)
     : scheduler(std::move(scheduler_))
-    , pipeline_manager(std::make_unique<PipelineManager>(server_info))
+    , pipeline_task_scheduler(std::make_unique<TaskScheduler>(server_info))
     , log(Logger::get("TaskManager"))
 {}
 

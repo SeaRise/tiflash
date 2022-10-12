@@ -72,24 +72,10 @@ IOPoller::~IOPoller()
 bool IOPoller::handleIOModeTask(std::vector<PipelineTaskPtr> & ready_tasks, PipelineTaskPtr && task)
 {
     assert(task);
-    try
+    if (task->tryToCpuMode())
     {
-        auto pre_status = task->status;
-        if (task->tryToCpuMode())
-        {
-            if (pre_status == PipelineTaskStatus::io_wait)
-                ready_tasks.emplace_back(std::move(task));
-            else
-            {
-                assert(pre_status == PipelineTaskStatus::io_finishing);
-                pool.handleFinishTask(task);
-            }
-            return true;
-        }
-    }
-    catch (...)
-    {
-        pool.handleErrTask(task, toFail(getCurrentExceptionMessage(true)));
+        if (task->status == PipelineTaskStatus::cpu_run)
+            ready_tasks.emplace_back(std::move(task));
         return true;
     }
     return false;
@@ -107,28 +93,18 @@ void IOPoller::ioModeLoop()
         if (local_blocked_tasks.empty())
         {
             std::unique_lock<std::mutex> lock(mutex);
-            while (!is_shutdown.load(std::memory_order_acquire) && this->blocked_tasks.empty())
+            while (!is_shutdown.load(std::memory_order_acquire) && blocked_tasks.empty())
                 cond.wait(lock);
             if (is_shutdown.load(std::memory_order_acquire))
                 break;
-            assert(!this->blocked_tasks.empty());
+            assert(!blocked_tasks.empty());
             local_blocked_tasks.splice(local_blocked_tasks.end(), blocked_tasks);
         }
         else
         {
-            std::unique_lock<std::mutex> lock(mutex);
-            local_blocked_tasks.splice(local_blocked_tasks.end(), blocked_tasks);
-            if (local_blocked_tasks.empty() && blocked_tasks.empty())
-            {
-                std::cv_status cv_status = std::cv_status::no_timeout;
-                while (!is_shutdown.load(std::memory_order_acquire) && this->blocked_tasks.empty())
-                    cv_status = cond.wait_for(lock, std::chrono::milliseconds(10));
-                if (cv_status == std::cv_status::timeout)
-                    continue;
-                if (is_shutdown.load(std::memory_order_acquire))
-                    break;
+            std::lock_guard lock(mutex);
+            if (!blocked_tasks.empty())
                 local_blocked_tasks.splice(local_blocked_tasks.end(), blocked_tasks);
-            }
         }
 
         auto task_it = local_blocked_tasks.begin();

@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include <Flash/Pipeline/dag/Event.h>
+#include <Flash/Pipeline/dag/PipelineEvent.h>
 
 #include <atomic>
 #include <mutex>
@@ -22,19 +22,21 @@
 
 namespace DB
 {
-enum class EventQueueStatus
+enum class PipelineEventQueueStatus
 {
     running,
     cancelled,
     finished,
 };
 
-class EventQueue
+class PipelineEventQueue
 {
 public:
     void submit(PipelineEvent && event);
 
-    EventQueueStatus pop(PipelineEvent & event);
+    void submitFirst(PipelineEvent && event);
+
+    PipelineEventQueueStatus pop(PipelineEvent & event);
 
     void finish();
 
@@ -45,6 +47,7 @@ private:
     std::condition_variable cond;
     std::list<PipelineEvent> queue;
 
-    std::atomic<EventQueueStatus> status{EventQueueStatus::running};
+    std::atomic<PipelineEventQueueStatus> status{PipelineEventQueueStatus::running};
 };
+using PipelineEventQueuePtr = std::shared_ptr<PipelineEventQueue>;
 } // namespace DB

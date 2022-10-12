@@ -16,7 +16,7 @@
 
 #include <Flash/Mpp/MPPTask.h>
 #include <Flash/Mpp/MinTSOScheduler.h>
-#include <Flash/Pipeline/PipelineManager.h>
+#include <Flash/Pipeline/task/TaskScheduler.h>
 #include <Server/ServerInfo.h>
 #include <common/logger_useful.h>
 #include <kvproto/mpp.pb.h>
@@ -63,7 +63,7 @@ class MPPTaskManager : private boost::noncopyable
 {
     MPPTaskSchedulerPtr scheduler;
 
-    PipelineManagerPtr pipeline_manager;
+    std::unique_ptr<TaskScheduler> pipeline_task_scheduler;
 
     std::mutex mu;
 
@@ -78,7 +78,7 @@ public:
 
     ~MPPTaskManager() = default;
 
-    PipelineManager & getPipelineManager() { return *pipeline_manager; }
+    TaskScheduler & getPipelineTaskScheduler() { return *pipeline_task_scheduler; }
 
     MPPQueryTaskSetPtr getQueryTaskSetWithoutLock(UInt64 query_id);
 

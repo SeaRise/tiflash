@@ -41,13 +41,10 @@ private:
 };
 using EventLoopPtr = std::unique_ptr<EventLoop>;
 
-struct PipelineManager;
 class EventLoopPool
 {
 public:
-    EventLoopPool(
-        size_t loop_num,
-        PipelineManager & pipeline_manager_);
+    explicit EventLoopPool(size_t loop_num);
 
     void finish();
 
@@ -63,11 +60,7 @@ private:
 
     bool popTask(PipelineTaskPtr & task);
 
-    void handleFinishTask(const PipelineTaskPtr & task);
-    void handleErrTask(const PipelineTaskPtr & task, const PipelineTaskResult & result);
 private:
-    PipelineManager & pipeline_manager;
-
     IOPoller io_poller;
 
     mutable std::mutex global_mutex;

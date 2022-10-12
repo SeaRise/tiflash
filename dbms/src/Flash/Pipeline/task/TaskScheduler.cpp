@@ -19,13 +19,7 @@
 
 namespace DB
 {
-TaskScheduler::TaskScheduler(
-    PipelineManager & pipeline_manager, 
-    const ServerInfo & server_info)
-    : event_loop_pool(
-        server_info.cpu_info.physical_cores, 
-        pipeline_manager)
-{}
+TaskScheduler::TaskScheduler(const ServerInfo & server_info): event_loop_pool(server_info.cpu_info.physical_cores) {}
 
 TaskScheduler::~TaskScheduler()
 {

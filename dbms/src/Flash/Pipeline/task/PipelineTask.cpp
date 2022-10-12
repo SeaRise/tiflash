@@ -16,6 +16,7 @@
 #include <Common/Exception.h>
 #include <Common/MemoryTrackerSetter.h>
 #include <Flash/Pipeline/task/PipelineTask.h>
+#include <Flash/Pipeline/dag/PipelineEventQueue.h>
 #include <magic_enum.hpp>
 
 namespace DB
@@ -28,11 +29,30 @@ String PipelineTask::toString() const
 // must in io mode.
 bool PipelineTask::tryToCpuMode()
 {
-    MemoryTrackerSetter setter(true, getMemTracker());
     assert(status == PipelineTaskStatus::io_wait || status == PipelineTaskStatus::io_finishing);
-    if (transforms->isIOReady())
+    if (unlikely(transforms->isCancelled()))
     {
-        changeStatus(PipelineTaskStatus::cpu_run);
+        cancel();
+        return true;
+    }
+    try
+    {
+        MemoryTrackerSetter setter(true, getMemTracker());
+        if (transforms->isIOReady())
+        {
+            if (status == PipelineTaskStatus::io_finishing)
+                finish();
+            else
+            {
+                assert(status == PipelineTaskStatus::io_wait);
+                changeStatus(PipelineTaskStatus::cpu_run);
+            }
+            return true;
+        }
+    }
+    catch (...)
+    {
+        occurErr(getCurrentExceptionMessage(true));
         return true;
     }
     return false;
@@ -56,7 +76,7 @@ void PipelineTask::prepare()
 }
 
 // must in cpu mode.
-PipelineTaskResult PipelineTask::execute()
+void PipelineTask::execute()
 {
     try
     {
@@ -65,37 +85,56 @@ PipelineTaskResult PipelineTask::execute()
         int64_t time_spent = 0;
         while (true)
         {
+            if (unlikely(transforms->isCancelled()))
+            {
+                cancel();
+                return;
+            }
             Stopwatch stopwatch {CLOCK_MONOTONIC_COARSE};
             if (!transforms->execute())
             {
                 transforms->finish();
-                if (!transforms->isIOReady())
+                if (transforms->isIOReady())
+                    finish();
+                else
                     changeStatus(PipelineTaskStatus::io_finishing);
-                return toFinish();
+                return;
             }
             else if (!transforms->isIOReady())
             {
                 changeStatus(PipelineTaskStatus::io_wait);
-                return toRunning();
+                return;
             }
             else
             {
                 time_spent += stopwatch.elapsed();
                 static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
                 if (time_spent >= YIELD_MAX_TIME_SPENT)
-                    return toRunning();
+                    return;
             }
         }
     }
     catch (...)
     {
-        return toFail(getCurrentExceptionMessage(true));
+        occurErr(getCurrentExceptionMessage(true));
     }
 }
 
 void PipelineTask::finish()
 {
     changeStatus(PipelineTaskStatus::finish);
+    event_queue->submit(PipelineEvent::finish(task_id, pipeline_id));
+}
+
+void PipelineTask::occurErr(const String & err_msg)
+{
+    changeStatus(PipelineTaskStatus::error);
+    event_queue->submitFirst(PipelineEvent::fail(err_msg));
+}
+
+void PipelineTask::cancel()
+{
+    changeStatus(PipelineTaskStatus::cancelled);
 }
 
 void PipelineTask::changeStatus(PipelineTaskStatus new_status)
@@ -103,18 +142,5 @@ void PipelineTask::changeStatus(PipelineTaskStatus new_status)
     auto pre_status = status;
     status = new_status;
     LOG_DEBUG(logger, "change status: {} -> {}", magic_enum::enum_name(pre_status), magic_enum::enum_name(status));
-}
-
-PipelineTaskResult toFinish()
-{
-    return PipelineTaskResult{PipelineTaskResultType::finished, ""};
-}
-PipelineTaskResult toFail(const String & err_msg)
-{
-    return PipelineTaskResult{PipelineTaskResultType::error, err_msg};
-}
-PipelineTaskResult toRunning()
-{
-    return PipelineTaskResult{PipelineTaskResultType::running, ""};
 }
 } // namespace DB

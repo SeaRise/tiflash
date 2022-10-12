@@ -17,13 +17,9 @@
 #include <Common/Logger.h>
 #include <Flash/Executor/ResultHandler.h>
 #include <Flash/Mpp/MPPTaskId.h>
-#include <Flash/Pipeline/dag/Event.h>
-#include <Flash/Pipeline/dag/EventQueue.h>
 #include <Flash/Pipeline/dag/Pipeline.h>
 #include <Flash/Pipeline/dag/PipelineStatusMachine.h>
 #include <Flash/Planner/PhysicalPlanNode.h>
-
-#include <memory>
 
 namespace DB
 {
@@ -37,6 +33,10 @@ public:
         return ++current_id;
     }
 };
+
+struct PipelineEvent;
+class PipelineEventQueue;
+using PipelineEventQueuePtr = std::shared_ptr<PipelineEventQueue>;
 
 class TaskScheduler;
 class DAGScheduler
@@ -56,14 +56,12 @@ public:
 
     const MPPTaskId & getMPPTaskId() const { return mpp_task_id; }
 
-    void submit(PipelineEvent && event);
-
 private:
-    PipelinePtr genPipeline(const PhysicalPlanNodePtr & plan_node);
+    PipelinePtr genPipeline(const PhysicalPlanNodePtr & plan_node, PipelineIDGenerator & id_generator);
 
-    std::unordered_set<UInt32> createParentPipelines(const PhysicalPlanNodePtr & plan_node);
+    std::unordered_set<UInt32> createParentPipelines(const PhysicalPlanNodePtr & plan_node, PipelineIDGenerator & id_generator);
 
-    PipelinePtr createNonJoinedPipelines(const PipelinePtr & pipeline);
+    PipelinePtr createNonJoinedPipelines(const PipelinePtr & pipeline, PipelineIDGenerator & id_generator);
 
     void submitPipeline(const PipelinePtr & pipeline);
 
@@ -88,11 +86,9 @@ private:
 
     PipelineStatusMachine status_machine;
 
-    PipelineIDGenerator id_generator;
-
-    EventQueue event_queue;
-
     Context & context;
+
+    PipelineEventQueuePtr event_queue;
 
     MPPTaskId mpp_task_id;
 
@@ -100,6 +96,4 @@ private:
 
     TaskScheduler & task_scheduler;
 };
-
-using DAGSchedulerPtr = std::shared_ptr<DAGScheduler>;
 } // namespace DB

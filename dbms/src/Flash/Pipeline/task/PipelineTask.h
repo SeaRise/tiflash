@@ -29,26 +29,14 @@ enum class PipelineTaskStatus
     // io mode
     io_wait,
     io_finishing,
-    // finish
+    // finish mode
     finish,
-};
-
-enum class PipelineTaskResultType
-{
-    running,
-    finished,
     error,
+    cancelled,
 };
 
-struct PipelineTaskResult
-{
-    PipelineTaskResultType type;
-    String err_msg;
-};
-
-PipelineTaskResult toFinish();
-PipelineTaskResult toFail(const String & err_msg);
-PipelineTaskResult toRunning();
+class PipelineEventQueue;
+using PipelineEventQueuePtr = std::shared_ptr<PipelineEventQueue>;
 
 class PipelineTask
 {
@@ -57,45 +45,49 @@ public:
         UInt32 task_id_,
         UInt32 pipeline_id_,
         const MPPTaskId & mpp_task_id_,
-        const TransformsPtr & transforms_)
+        const TransformsPtr & transforms_,
+        const PipelineEventQueuePtr & event_queue_)
         : task_id(task_id_)
         , pipeline_id(pipeline_id_)
         , mpp_task_id(mpp_task_id_)
         , transforms(transforms_)
+        , event_queue(event_queue_)
         , mem_tracker(current_memory_tracker ? current_memory_tracker->shared_from_this() : nullptr)
         , logger(Logger::get("PipelineTask", fmt::format("{{mpp_task_id: {}, pipeline_id: {}, task_id: {}}}", mpp_task_id.toString(), pipeline_id, task_id)))
     {}
 
     void prepare();
 
-    PipelineTaskResult execute();
-
-    void finish();
+    void execute();
 
     bool tryToCpuMode();
     bool tryToIOMode();
 
     String toString() const;
 
-    void changeStatus(PipelineTaskStatus new_status);
-
 public:
-    UInt32 task_id;
-    UInt32 pipeline_id;
-    MPPTaskId mpp_task_id;
-    TransformsPtr transforms;
-
     PipelineTaskStatus status = PipelineTaskStatus::cpu_run;
 
-    std::shared_ptr<MemoryTracker> mem_tracker;
-
 private:
+    void finish();
+    void occurErr(const String & err_msg);
+    void cancel();
+
+    void changeStatus(PipelineTaskStatus new_status);
+
     MemoryTracker * getMemTracker()
     {
         return mem_tracker ? mem_tracker.get() : nullptr;
     }
 
 private:
+    UInt32 task_id;
+    UInt32 pipeline_id;
+    MPPTaskId mpp_task_id;
+
+    TransformsPtr transforms;
+    PipelineEventQueuePtr event_queue;
+    std::shared_ptr<MemoryTracker> mem_tracker;
     LoggerPtr logger;
 };
 

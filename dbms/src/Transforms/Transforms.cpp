@@ -44,9 +44,6 @@ bool Transforms::execute()
     assert(source);
     assert(sink);
 
-    if (unlikely(is_cancelled))
-        return false;
-
     auto block = source->read();
     for (const auto & transform : transforms)
     {
@@ -76,8 +73,6 @@ void Transforms::cancel(bool kill)
 
 bool Transforms::isIOReady()
 {
-    if (unlikely(is_cancelled))
-        return true;
     return sink->isIOReady() && source->isIOReady();
 }
 

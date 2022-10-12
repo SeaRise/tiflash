@@ -13,9 +13,8 @@
 // limitations under the License.
 
 #include <Common/setThreadName.h>
-#include <Flash/Pipeline/PipelineManager.h>
 #include <Flash/Pipeline/dag/DAGScheduler.h>
-#include <Flash/Pipeline/dag/Event.h>
+#include <Flash/Pipeline/dag/PipelineEvent.h>
 #include <Flash/Pipeline/task/EventLoopPool.h>
 #include <errno.h>
 
@@ -40,30 +39,19 @@ void EventLoop::handleCpuModeTask(PipelineTaskPtr && task)
 {
     assert(task);
     LOG_DEBUG(logger, "handle cpu mode task {}", task->toString());
-    auto result = task->execute();
-    switch (result.type)
+    task->execute();
+    switch (task->status)
     {
-    case PipelineTaskResultType::running:
-    {
-        if (task->status == PipelineTaskStatus::io_wait)
-            pool.io_poller.submit(std::move(task));
-        else
-            pool.submitCPU(std::move(task));
+    case PipelineTaskStatus::io_wait:
+    case PipelineTaskStatus::io_finishing:
+        pool.io_poller.submit(std::move(task));
         break;
-    }
-    case PipelineTaskResultType::finished:
-    {
-        if (task->status == PipelineTaskStatus::io_finishing)
-            pool.io_poller.submit(std::move(task));
-        else
-            pool.handleFinishTask(task);
+    case PipelineTaskStatus::cpu_run:
+        pool.submitCPU(std::move(task));
         break;
-    }
-    case PipelineTaskResultType::error:
-    {
-        pool.handleErrTask(task, result);
-        break;
-    }
+    default:
+        // for finish mode, do nothing here.
+        ;
     }
 }
 
@@ -84,11 +72,8 @@ void EventLoop::cpuModeLoop()
     LOG_INFO(logger, "cpu event loop {} finished", loop_id);
 }
 
-EventLoopPool::EventLoopPool(
-    size_t loop_num,
-    PipelineManager & pipeline_manager_)
-    : pipeline_manager(pipeline_manager_)
-    , io_poller(*this)
+EventLoopPool::EventLoopPool(size_t loop_num)
+    : io_poller(*this)
 {
     RUNTIME_ASSERT(loop_num > 0);
     cpu_loops.reserve(loop_num);
@@ -121,10 +106,10 @@ void EventLoopPool::submit(std::vector<PipelineTaskPtr> & tasks)
 {
     if (tasks.empty())
         return;
-    std::vector<PipelineTaskPtr> io_tasks;
-    io_tasks.reserve(tasks.size());
     std::vector<PipelineTaskPtr> cpu_tasks;
     cpu_tasks.reserve(tasks.size());
+    std::vector<PipelineTaskPtr> io_tasks;
+    io_tasks.reserve(tasks.size());
     while (!tasks.empty())
     {
         auto & task = tasks.back();
@@ -136,8 +121,8 @@ void EventLoopPool::submit(std::vector<PipelineTaskPtr> & tasks)
             cpu_tasks.emplace_back(std::move(task));
         tasks.pop_back();
     }
-    io_poller.submit(io_tasks);
     submitCPU(cpu_tasks);
+    io_poller.submit(io_tasks);
 }
 
 void EventLoopPool::submitCPU(PipelineTaskPtr && task)
@@ -181,20 +166,5 @@ EventLoopPool::~EventLoopPool()
 {
     cpu_loops.clear();
     LOG_INFO(logger, "stop event loop pool");
-}
-
-void EventLoopPool::handleFinishTask(const PipelineTaskPtr & task)
-{
-    task->finish();
-    LOG_DEBUG(logger, "pipeline task {} finished", task->toString());
-    if (auto dag_scheduler = pipeline_manager.getDAGScheduler(task->mpp_task_id); likely(dag_scheduler))
-        dag_scheduler->submit(PipelineEvent::finish(task->task_id, task->pipeline_id));
-}
-void EventLoopPool::handleErrTask(const PipelineTaskPtr & task, const PipelineTaskResult & result)
-{
-    task->finish();
-    LOG_DEBUG(logger, "pipeline task {} occur error", task->toString());
-    if (auto dag_scheduler = pipeline_manager.getDAGScheduler(task->mpp_task_id); likely(dag_scheduler))
-        dag_scheduler->submit(PipelineEvent::fail(result.err_msg));
 }
 } // namespace DB

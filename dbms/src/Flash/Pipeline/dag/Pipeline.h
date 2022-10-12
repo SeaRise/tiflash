@@ -23,6 +23,9 @@
 
 namespace DB
 {
+class PipelineEventQueue;
+using PipelineEventQueuePtr = std::shared_ptr<PipelineEventQueue>;
+
 class Pipeline
 {
 public:
@@ -31,6 +34,7 @@ public:
         const MPPTaskId & mpp_task_id_,
         UInt32 id_,
         const std::unordered_set<UInt32> & parent_ids_,
+        const PipelineEventQueuePtr & event_queue_,
         const String & req_id);
 
     std::vector<PipelineTaskPtr> transform(Context & context, size_t concurrency);
@@ -58,6 +62,8 @@ private:
     UInt32 id;
 
     std::unordered_set<UInt32> parent_ids;
+
+    PipelineEventQueuePtr event_queue;
 
     std::vector<TransformsPtr> task_transforms_vec;
 

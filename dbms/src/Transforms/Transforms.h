@@ -59,6 +59,8 @@ public:
 
     bool isIOReady();
 
+    bool isCancelled() const { return is_cancelled; }
+
 private:
     TableLockHolders table_locks;
 

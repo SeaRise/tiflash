@@ -38,8 +38,8 @@ HashPartitionWriter<StreamWriterPtr>::HashPartitionWriter(
     rows_in_blocks = 0;
     partition_num = writer_->getPartitionNum();
     RUNTIME_CHECK(partition_num > 0);
-    RUNTIME_CHECK(dag_context.encode_type == tipb::EncodeType::TypeCHBlock);
-    chunk_codec_stream = std::make_unique<CHBlockChunkCodec>()->newCodecStream(dag_context.result_field_types);
+    RUNTIME_CHECK(encode_type == tipb::EncodeType::TypeCHBlock);
+    chunk_codec_stream = std::make_unique<CHBlockChunkCodec>()->newCodecStream(result_field_types);
 }
 
 template <class StreamWriterPtr>
@@ -59,7 +59,7 @@ template <class StreamWriterPtr>
 void HashPartitionWriter<StreamWriterPtr>::write(const Block & block)
 {
     RUNTIME_CHECK_MSG(
-        block.columns() == dag_context.result_field_types.size(),
+        block.columns() == result_field_types.size(),
         "Output column size mismatch with field type size");
     size_t rows = block.rows();
     rows_in_blocks += rows;
@@ -141,7 +141,7 @@ template <class StreamWriterPtr>
 void HashPartitionWriter<StreamWriterPtr>::asyncWrite(Block && block)
 {
     RUNTIME_CHECK_MSG(
-        block.columns() == dag_context.result_field_types.size(),
+        block.columns() == result_field_types.size(),
         "Output column size mismatch with field type size");
     size_t rows = block.rows();
     rows_in_blocks += rows;

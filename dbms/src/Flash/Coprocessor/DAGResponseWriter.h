@@ -57,6 +57,8 @@ public:
 protected:
     Int64 records_per_chunk;
     DAGContext & dag_context;
+    std::vector<tipb::FieldType> result_field_types;
+    tipb::EncodeType encode_type;
     std::unordered_map<String, ExecutionSummary> previous_execution_stats;
     std::unordered_set<String> local_executors;
 };

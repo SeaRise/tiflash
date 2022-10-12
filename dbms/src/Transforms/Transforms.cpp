@@ -78,6 +78,8 @@ void Transforms::cancel(bool kill)
 
 bool Transforms::isIOReady()
 {
+    if (unlikely(isCancelledOrThrowIfKilled()))
+        return true;
     return sink->isIOReady() && source->isIOReady();
 }
 

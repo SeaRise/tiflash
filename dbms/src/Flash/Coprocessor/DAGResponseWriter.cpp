@@ -188,18 +188,20 @@ DAGResponseWriter::DAGResponseWriter(
     DAGContext & dag_context_)
     : records_per_chunk(records_per_chunk_)
     , dag_context(dag_context_)
+    , result_field_types(dag_context.result_field_types)
+    , encode_type(dag_context.encode_type)
 {
     for (auto & p : dag_context.getProfileStreamsMap())
     {
         local_executors.insert(p.first);
     }
-    if (dag_context.encode_type == tipb::EncodeType::TypeCHBlock)
+    if (encode_type == tipb::EncodeType::TypeCHBlock)
     {
         records_per_chunk = -1;
     }
-    if (dag_context.encode_type != tipb::EncodeType::TypeCHBlock
-        && dag_context.encode_type != tipb::EncodeType::TypeChunk
-        && dag_context.encode_type != tipb::EncodeType::TypeDefault)
+    if (encode_type != tipb::EncodeType::TypeCHBlock
+        && encode_type != tipb::EncodeType::TypeChunk
+        && encode_type != tipb::EncodeType::TypeDefault)
     {
         throw TiFlashException(
             "Only Default/Arrow/CHBlock encode type is supported in DAGBlockOutputStream.",

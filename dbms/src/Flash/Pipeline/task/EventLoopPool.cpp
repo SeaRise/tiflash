@@ -155,20 +155,16 @@ void EventLoopPool::submitCPU(std::vector<PipelineTaskPtr> & tasks)
 {
     if (tasks.empty())
         return;
-    size_t notify_count = std::min(tasks.size(), cpu_loops.size());
+    std::lock_guard<std::mutex> lock(global_mutex);
+    while (!tasks.empty())
     {
-        std::lock_guard<std::mutex> lock(global_mutex);
-        while (!tasks.empty())
-        {
-            auto & task = tasks.back();
-            assert(task);
-            LOG_DEBUG(logger, "submit {} to cpu event loop", task->toString());
-            cpu_event_queue.emplace_back(std::move(task));
-            tasks.pop_back();
-        }
-    }
-    for (size_t i = 0; i < notify_count; ++i)
+        auto & task = tasks.back();
+        assert(task);
+        LOG_DEBUG(logger, "submit {} to cpu event loop", task->toString());
+        cpu_event_queue.emplace_back(std::move(task));
+        tasks.pop_back();
         cv.notify_one();
+    }
 }
 
 void EventLoopPool::finish()
@@ -190,14 +186,14 @@ EventLoopPool::~EventLoopPool()
 void EventLoopPool::handleFinishTask(const PipelineTaskPtr & task)
 {
     task->finish();
-    LOG_INFO(logger, "pipeline task {} finished", task->toString());
+    LOG_DEBUG(logger, "pipeline task {} finished", task->toString());
     if (auto dag_scheduler = pipeline_manager.getDAGScheduler(task->mpp_task_id); likely(dag_scheduler))
         dag_scheduler->submit(PipelineEvent::finish(task->task_id, task->pipeline_id));
 }
 void EventLoopPool::handleErrTask(const PipelineTaskPtr & task, const PipelineTaskResult & result)
 {
     task->finish();
-    LOG_INFO(logger, "pipeline task {} occur error", task->toString());
+    LOG_DEBUG(logger, "pipeline task {} occur error", task->toString());
     if (auto dag_scheduler = pipeline_manager.getDAGScheduler(task->mpp_task_id); likely(dag_scheduler))
         dag_scheduler->submit(PipelineEvent::fail(result.err_msg));
 }

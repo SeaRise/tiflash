@@ -15,7 +15,7 @@
 #pragma once
 
 #include <Flash/Planner/plans/PhysicalLeaf.h>
-#include <Interpreters/AggregateStore.h>
+#include <Transforms/AggregateStore.h>
 #include <Interpreters/ExpressionActions.h>
 
 namespace DB

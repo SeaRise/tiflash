@@ -44,7 +44,7 @@ bool Transforms::execute()
     assert(source);
     assert(sink);
 
-    if (unlikely(isCancelledOrThrowIfKilled()))
+    if (unlikely(is_cancelled))
         return false;
 
     auto block = source->read();
@@ -69,8 +69,6 @@ void Transforms::finish()
 
 void Transforms::cancel(bool kill)
 {
-    if (kill)
-        is_killed = true;
     is_cancelled = true;
     assert(source);
     source->cancel(kill);
@@ -78,18 +76,9 @@ void Transforms::cancel(bool kill)
 
 bool Transforms::isIOReady()
 {
-    if (unlikely(isCancelledOrThrowIfKilled()))
+    if (unlikely(is_cancelled))
         return true;
     return sink->isIOReady() && source->isIOReady();
-}
-
-bool Transforms::isCancelledOrThrowIfKilled() const
-{
-    if (!is_cancelled)
-        return false;
-    if (is_killed)
-        throw Exception("Query was cancelled", ErrorCodes::QUERY_WAS_CANCELLED);
-    return true;
 }
 
 Block Transforms::getHeader()

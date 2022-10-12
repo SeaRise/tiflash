@@ -73,8 +73,7 @@ void PhysicalExchangeReceiver::transform(TransformsPipeline & pipeline, Context 
         transforms->setSource(std::make_shared<ExchangeReceiverSource>(
             mpp_exchange_receiver,
             log->identifier(),
-            execId(),
-            /*stream_id=*/0));
+            execId()));
         transforms->append(std::make_shared<SquashTransform>(8192, 0, log->identifier()));
     });
 }

@@ -705,32 +705,29 @@ DecodeDetail ExchangeReceiverBase<RPCContext>::decodeChunks(
 }
 
 template <typename RPCContext>
-AsyncExchangeReceiverResult ExchangeReceiverBase<RPCContext>::asyncReceive(size_t stream_id)
+bool ExchangeReceiverBase<RPCContext>::asyncReceive(std::shared_ptr<ReceivedMessage> & recv_msg)
 {
-    if (unlikely(stream_id >= msg_channels.size()))
-    {
-        LOG_FMT_ERROR(exc_log, "stream_id out of range, stream_id: {}, total_stream_count: {}", stream_id, msg_channels.size());
-        return AsyncExchangeReceiverResult::newError(0, "", "stream_id out of range");
-    }
-    std::shared_ptr<ReceivedMessage> recv_msg;
-    auto try_pop_result = msg_channels[stream_id]->tryPop(recv_msg);
+    assert(!recv_msg);
+    assert(1 == msg_channels.size());
+    auto try_pop_result = msg_channels[0]->tryPop(recv_msg);
     switch (try_pop_result)
     {
     case MPMCQueueResult::EMPTY:
-        return AsyncExchangeReceiverResult::newAwait(name);
+        return false;
     case MPMCQueueResult::OK:
     {
         assert(recv_msg != nullptr);
         if (unlikely(recv_msg->error_ptr != nullptr))
-            return AsyncExchangeReceiverResult::newError(recv_msg->source_index, recv_msg->req_info, recv_msg->error_ptr->msg());
-        return AsyncExchangeReceiverResult::newOk(recv_msg, recv_msg->source_index, recv_msg->req_info);;
+            throw Exception(recv_msg->error_ptr->msg());
+        return true;
     }
     default:
     {
+        assert(!recv_msg);
         std::unique_lock lock(mu);
-        return state != ExchangeReceiverState::NORMAL
-            ? AsyncExchangeReceiverResult::newError(0, name, constructStatusString(state, err_msg))
-            : AsyncExchangeReceiverResult::newEOF(name); /// live_connections == 0, msg_channel is finished, and state is NORMAL, that is the end.
+        if (unlikely(state != ExchangeReceiverState::NORMAL))
+            throw Exception(constructStatusString(state, err_msg));
+        return true; /// live_connections == 0, msg_channel is finished, and state is NORMAL, that is the end.
     }
     }
 }

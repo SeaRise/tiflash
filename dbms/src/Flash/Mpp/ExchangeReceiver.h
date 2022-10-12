@@ -113,59 +113,6 @@ private:
     {}
 };
 
-struct AsyncExchangeReceiverResult
-{
-    std::shared_ptr<ReceivedMessage> recv_msg;
-    size_t call_index;
-    String req_info;
-    bool meet_error;
-    String error_msg;
-    bool eof;
-    bool await;
-
-    AsyncExchangeReceiverResult()
-        : AsyncExchangeReceiverResult(nullptr, 0)
-    {}
-
-    static AsyncExchangeReceiverResult newOk(const std::shared_ptr<ReceivedMessage> & recv_msg_, size_t call_index_, const String & req_info_)
-    {
-        return {recv_msg_, call_index_, req_info_, /*meet_error*/ false, /*error_msg*/ "", /*eof*/ false};
-    }
-
-    static AsyncExchangeReceiverResult newEOF(const String & req_info_)
-    {
-        return {/*recv_msg*/ nullptr, 0, req_info_, /*meet_error*/ false, /*error_msg*/ "", /*eof*/ true};
-    }
-
-    static AsyncExchangeReceiverResult newError(size_t call_index, const String & req_info, const String & error_msg)
-    {
-        return {/*recv_msg*/ nullptr, call_index, req_info, /*meet_error*/ true, error_msg, /*eof*/ false};
-    }
-
-    static AsyncExchangeReceiverResult newAwait(const String & req_info_)
-    {
-        return {/*recv_msg*/ nullptr, 0, req_info_, /*meet_error*/ false, /*error_msg*/ "", /*eof*/ false, /*await*/ true};
-    }
-
-private:
-    AsyncExchangeReceiverResult(
-        const std::shared_ptr<ReceivedMessage> & recv_msg_,
-        size_t call_index_,
-        const String & req_info_ = "",
-        bool meet_error_ = false,
-        const String & error_msg_ = "",
-        bool eof_ = false,
-        bool await_ = false)
-        : recv_msg(recv_msg_)
-        , call_index(call_index_)
-        , req_info(req_info_)
-        , meet_error(meet_error_)
-        , error_msg(error_msg_)
-        , eof(eof_)
-        , await(await_)
-    {}
-};
-
 enum class ExchangeReceiverState
 {
     NORMAL,
@@ -205,12 +152,7 @@ public:
         const Block & header,
         size_t stream_id);
 
-    AsyncExchangeReceiverResult asyncReceive(size_t stream_id);
-
-    ExchangeReceiverResult asyncNextResult(
-        std::queue<Block> & block_queue,
-        const Block & header,
-        size_t stream_id);
+    bool asyncReceive(std::shared_ptr<ReceivedMessage> & recv_msg);
 
     size_t getSourceNum() const { return source_num; }
     uint64_t getFineGrainedShuffleStreamCount() const { return fine_grained_shuffle_stream_count; }

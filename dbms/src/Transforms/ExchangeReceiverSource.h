@@ -33,12 +33,10 @@ namespace DB
 class ExchangeReceiverSource : public Source
 {
 public:
-    ExchangeReceiverSource(std::shared_ptr<ExchangeReceiver> remote_reader_, const String & req_id, const String & executor_id, size_t stream_id_)
+    ExchangeReceiverSource(std::shared_ptr<ExchangeReceiver> remote_reader_, const String & req_id, const String & executor_id)
         : remote_reader(remote_reader_)
         , source_num(remote_reader->getSourceNum())
-        , name(fmt::format("TiRemote({})", ExchangeReceiver::name))
-        , log(Logger::get(name, req_id, executor_id))
-        , stream_id(stream_id_)
+        , log(Logger::get("ExchangeReceiverSource", req_id, executor_id))
     {
         sample_block = Block(getColumnWithTypeAndName(toNamesAndTypes(remote_reader->getOutputSchema())));
     }
@@ -50,77 +48,60 @@ public:
         if (kill)
             remote_reader->cancel();
     }
-    enum class FetchResult
-    {
-        finished,
-        fetched,
-        notFetched
-    };
+
     bool isIOReady() override
     {
-        if (done || recv_msg || !block_queue.empty() || !error_msg.empty())
+        if (done || !block_queue.empty() || recv_msg)
             return true;
-        auto fetch_result = fetchRemoteResult();
-        switch (fetch_result)
+
+        while (true)
         {
-        case FetchResult::finished:
-        {
-            done = true;
-            return true;
-        }
-        case FetchResult::notFetched:
-            return false;
-        default:
-            return true;
+            assert(!recv_msg);
+            if (!remote_reader->asyncReceive(recv_msg))
+            {
+                assert(!recv_msg);
+                return false;
+            }
+            else
+            {
+                if (recv_msg)
+                {
+                    if (!recv_msg->chunks.empty())
+                        return true;
+                    else
+                    {
+                        recv_msg = nullptr;
+                        continue;
+                    }
+                }
+                else
+                {
+                    done = true;
+                    return true;
+                }
+            }
         }
     }
+
     Block read() override
     {
         if (done)
             return {};
         if (block_queue.empty())
         {
-            if (unlikely(!error_msg.empty()))
-            {
-                LOG_WARNING(log, "remote reader meets error: {}", error_msg);
-                throw Exception(error_msg);
-            }
+            assert(recv_msg);
             auto result = remote_reader->toDecodeResult(block_queue, sample_block, recv_msg);
+            recv_msg = nullptr;
             if (result.meet_error)
             {
                 LOG_WARNING(log, "remote reader meets error: {}", result.error_msg);
                 throw Exception(result.error_msg);
             }
-            recv_msg = nullptr;
         }
         // todo should merge some blocks to make sure the output block is big enough
-        Block block = block_queue.front();
+        Block block = std::move(block_queue.front());
         block_queue.pop();
         return block;
-    }
-
-private:
-    FetchResult fetchRemoteResult()
-    {
-        while (true)
-        {
-            auto result = remote_reader->asyncReceive(stream_id);
-            if (result.meet_error)
-            {
-                error_msg = result.error_msg;
-                return FetchResult::fetched;
-            }
-            if (result.eof)
-                return FetchResult::finished;
-            if (result.await)
-                return FetchResult::notFetched;
-            if (!result.recv_msg->chunks.empty())
-            {
-                recv_msg = result.recv_msg;
-                return FetchResult::fetched;
-            }
-            // else continue
-        }
     }
 
 private:
@@ -131,18 +112,10 @@ private:
 
     std::queue<Block> block_queue;
 
-    String name;
-
     const LoggerPtr log;
 
     bool done = false;
 
-    // For fine grained shuffle, sender will partition data into muiltiple streams by hashing.
-    // ExchangeReceiverBlockInputStream only need to read its own stream, i.e., streams[stream_id].
-    // CoprocessorBlockInputStream doesn't take care of this.
-    size_t stream_id;
-
     std::shared_ptr<ReceivedMessage> recv_msg;
-    String error_msg;
 };
 } // namespace DB

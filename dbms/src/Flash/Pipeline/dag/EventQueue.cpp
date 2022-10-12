@@ -18,10 +18,10 @@ namespace DB
 {
 void EventQueue::submit(PipelineEvent && event)
 {
+    if (status.load(std::memory_order_acquire) != EventQueueStatus::running)
+        return;
     {
-        std::unique_lock lock(mutex);
-        if (status != EventQueueStatus::running)
-            return;
+        std::lock_guard lock(mutex);
         queue.emplace_back(std::move(event));
     }
     cond.notify_one();
@@ -29,12 +29,19 @@ void EventQueue::submit(PipelineEvent && event)
 
 EventQueueStatus EventQueue::pop(PipelineEvent & event)
 {
+    auto get_status = status.load(std::memory_order_acquire);
+    if (get_status != EventQueueStatus::running)
+        return get_status;
     {
         std::unique_lock lock(mutex);
-        while (queue.empty() && status == EventQueueStatus::running)
+        while (queue.empty())
+        {
+            get_status = status.load(std::memory_order_acquire);
+            if (get_status != EventQueueStatus::running)
+                return get_status;
             cond.wait(lock);
-        if (status != EventQueueStatus::running)
-            return status;
+        }
+
         assert(!queue.empty());
         event = std::move(queue.front());
         queue.pop_front();
@@ -44,22 +51,16 @@ EventQueueStatus EventQueue::pop(PipelineEvent & event)
 
 void EventQueue::finish()
 {
-    {
-        std::lock_guard lock(mutex);
-        assert(status == EventQueueStatus::running);
-        status = EventQueueStatus::finished;
-    }
-    cond.notify_all();
+    auto expect_cur_status = EventQueueStatus::running;
+    RUNTIME_ASSERT(status.compare_exchange_strong(expect_cur_status, EventQueueStatus::finished));
+    cond.notify_one();
 }
 
 void EventQueue::cancel()
 {
-    {
-        std::lock_guard lock(mutex);
-        assert(status == EventQueueStatus::running);
-        status = EventQueueStatus::cancelled;
-    }
-    cond.notify_all();
+    auto expect_cur_status = EventQueueStatus::running;
+    RUNTIME_ASSERT(status.compare_exchange_strong(expect_cur_status, EventQueueStatus::cancelled));
+    cond.notify_one();
 }
 
 } // namespace DB

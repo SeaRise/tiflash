@@ -13,32 +13,10 @@
 // limitations under the License.
 
 #include <DataStreams/MergingAggregatedMemoryEfficientBlockInputStream.h>
-#include <Interpreters/AggregateStore.h>
+#include <Transforms/AggregateStore.h>
 
 namespace DB
 {
-namespace
-{
-class MergeLock
-{
-public:
-    MergeLock(std::vector<std::shared_mutex> & mutexes_): mutexes(mutexes_)
-    {
-        for (auto & mutex : mutexes)
-            mutex.lock_shared();
-    }
-    
-    ~MergeLock()
-    {
-        for (auto & mutex : mutexes)
-            mutex.unlock_shared();
-    }
-
-private:
-    std::vector<std::shared_mutex> & mutexes;
-};
-}
-
 AggregateStore::AggregateStore(
     const String & req_id,
     const FileProviderPtr & file_provider_,
@@ -110,28 +88,26 @@ std::unique_ptr<IBlockInputStream> AggregateStore::merge()
 
 bool AggregateStore::isTwoLevel() const
 {
-    MergeLock lock(*mutexes);
+    assert(impl);
     assert(!many_data.empty());
     return many_data[0]->isTwoLevel();
 }
 
 void AggregateStore::initForMerge()
 {
-    MergeLock lock(*mutexes);
     RUNTIME_ASSERT(!aggregator->hasTemporaryFiles());
+    assert(!impl);
     impl = aggregator->mergeAndConvertToBlocks(many_data, is_final, max_threads, true);
 }
 
 Block AggregateStore::readForMerge()
 {
-    MergeLock lock(*mutexes);
     assert(impl);
     return impl->read();
 }
 
 Block AggregateStore::getHeaderForMerge()
 {
-    MergeLock lock(*mutexes);
     assert(impl);
     return impl->getHeader();
 }

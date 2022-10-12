@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include <Interpreters/AggregateStore.h>
+#include <Transforms/AggregateStore.h>
 #include <Transforms/Sink.h>
 
 namespace DB

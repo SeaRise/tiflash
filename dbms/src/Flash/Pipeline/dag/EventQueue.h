@@ -16,6 +16,7 @@
 
 #include <Flash/Pipeline/dag/Event.h>
 
+#include <atomic>
 #include <mutex>
 #include <list>
 
@@ -44,6 +45,6 @@ private:
     std::condition_variable cond;
     std::list<PipelineEvent> queue;
 
-    EventQueueStatus status = EventQueueStatus::running;
+    std::atomic<EventQueueStatus> status{EventQueueStatus::running};
 };
 } // namespace DB

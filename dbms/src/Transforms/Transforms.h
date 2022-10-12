@@ -53,8 +53,6 @@ public:
 
     void cancel(bool kill);
 
-    bool isCancelledOrThrowIfKilled() const;
-
     Block getHeader();
 
     void addTableLock(const TableLockHolder & lock);
@@ -69,7 +67,6 @@ private:
     SinkPtr sink;
 
     std::atomic<bool> is_cancelled{false};
-    std::atomic<bool> is_killed{false};
 };
 using TransformsPtr = std::shared_ptr<Transforms>;
 } // namespace DB

@@ -16,7 +16,7 @@
 
 #include <Common/Logger.h>
 #include <DataStreams/IProfilingBlockInputStream.h>
-#include <Interpreters/AggregateStore.h>
+#include <Transforms/AggregateStore.h>
 
 namespace DB
 {

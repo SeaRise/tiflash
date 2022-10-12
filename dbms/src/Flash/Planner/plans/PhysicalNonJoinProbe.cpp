@@ -35,7 +35,7 @@
 #include <Flash/Planner/PhysicalPlanHelper.h>
 #include <Flash/Planner/plans/PhysicalNonJoinProbe.h>
 #include <Interpreters/Context.h>
-#include <Transforms/BlockInputStreamSource.h>
+#include <Transforms/NonJoinedSource.h>
 #include <Transforms/ExpressionTransform.h>
 #include <Transforms/TransformsPipeline.h>
 #include <common/logger_useful.h>
@@ -69,7 +69,7 @@ void PhysicalNonJoinProbe::transform(TransformsPipeline & pipeline, Context & co
     pipeline.init(not_joined_concurrency);
     pipeline.transform([&](auto & transforms) {
         auto non_joined_stream = join_ptr->createStreamWithNonJoinedRows(probe_side_prepare_header, i++, not_joined_concurrency, settings.max_block_size);
-        transforms->setSource(std::make_shared<BlockInputStreamSource>(non_joined_stream));
+        transforms->setSource(std::make_shared<NonJoinedSource>(join_ptr, non_joined_stream));
     });
 
     ExpressionActionsPtr schema_actions = PhysicalPlanHelper::newActions(pipeline.getHeader(), context);

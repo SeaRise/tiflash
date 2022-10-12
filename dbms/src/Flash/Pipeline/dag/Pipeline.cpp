@@ -49,6 +49,7 @@ std::vector<PipelineTaskPtr> Pipeline::transform(Context & context, size_t concu
     assert(plan_node);
     TransformsPipeline pipeline;
     plan_node->transform(pipeline, context, concurrency);
+    plan_node = nullptr;
 
     std::vector<PipelineTaskPtr> tasks;
     tasks.reserve(pipeline.concurrency());
@@ -82,8 +83,5 @@ void Pipeline::finish(size_t task_id)
 void Pipeline::finish()
 {
     task_transforms_vec = {};
-    // cannot be set to null in advance, because the object used by the task is held internally.
-    // such as NonJoinedBlockInputStream.parent.
-    plan_node = nullptr;
 }
 } // namespace DB

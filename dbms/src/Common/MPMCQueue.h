@@ -174,6 +174,12 @@ public:
         return emplaceObj<false>(nullptr, std::forward<Args>(args)...);
     }
 
+    template <typename U, typename... Args>
+    ALWAYS_INLINE Result tryEmplaceSharedPtr(Args &&... args)
+    {
+        return emplaceSharedPtr<U, false>(nullptr, std::forward<Args>(args)...);
+    }
+
     /// Cancel a NORMAL queue will wake up all blocking readers and writers.
     /// After `cancel()` the queue can't be pushed or popped any more.
     /// That means some objects may leave at the queue without poped.
@@ -376,6 +382,12 @@ private:
     ALWAYS_INLINE Result emplaceObj(const TimePoint * deadline, Args &&... args)
     {
         return assignObj<need_wait>(deadline, [&](void * addr) { new (addr) T(std::forward<Args>(args)...); });
+    }
+
+    template <typename U, bool need_wait, typename... Args>
+    ALWAYS_INLINE Result emplaceSharedPtr(const TimePoint * deadline, Args &&... args)
+    {
+        return assignObj<need_wait>(deadline, [&](void * addr) { new (addr) T(std::make_shared<U>(std::forward<Args>(args)...)); });
     }
 
     ALWAYS_INLINE bool isNormal() const

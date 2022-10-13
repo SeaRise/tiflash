@@ -76,7 +76,7 @@ public:
 
     virtual MPMCQueueResult nativePush(const mpp::MPPDataPacket & data)
     {
-        return send_queue.tryPush(std::make_shared<TrackedMppDataPacket>(data, getMemoryTracker()));
+        return send_queue.tryEmplaceSharedPtr<TrackedMppDataPacket>(data, getMemoryTracker());
     }
 
     virtual bool push(const mpp::MPPDataPacket & data)
@@ -183,7 +183,7 @@ public:
 
     MPMCQueueResult nativePush(const mpp::MPPDataPacket & data) override
     {
-        return queue.nativePush(std::make_shared<TrackedMppDataPacket>(data, getMemoryTracker()));
+        return queue.nativePush<TrackedMppDataPacket>(data, getMemoryTracker());
     }
 
     bool push(const mpp::MPPDataPacket & data) override

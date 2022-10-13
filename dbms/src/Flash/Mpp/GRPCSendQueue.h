@@ -120,10 +120,10 @@ public:
         return ret;
     }
 
-    template <typename U>
-    MPMCQueueResult nativePush(U && u)
+    template <typename U, typename... Args>
+    MPMCQueueResult nativePush(Args &&... args)
     {
-        auto ret = send_queue.tryPush(std::forward<U>(u));
+        auto ret = send_queue.template tryEmplaceSharedPtr<U>(std::forward<Args>(args)...);
         if (ret == MPMCQueueResult::OK)
         {
             kickCompletionQueue();

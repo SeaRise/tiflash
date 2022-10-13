@@ -136,9 +136,11 @@ bool MPPTunnel::asyncWrite(const mpp::MPPDataPacket & data)
     LOG_TRACE(log, "ready to write");
     {
         std::unique_lock lk(mu);
-        waitUntilConnectedOrFinished(lk);
-        if (tunnel_sender == nullptr)
-            throw Exception(fmt::format("write to tunnel which is already closed."));
+        // waitUntilConnectedOrFinished(lk);
+        // if (tunnel_sender == nullptr)
+        //     throw Exception(fmt::format("write to tunnel which is already closed."));
+        if (status == TunnelStatus::Unconnected)
+            return false;
     }
 
     auto res = tunnel_sender->nativePush(data);

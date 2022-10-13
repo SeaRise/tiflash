@@ -114,7 +114,7 @@ String DAGScheduler::handlePipelineFail(const PipelineEvent & event)
     return event.err_msg;
 }
 
-void DAGScheduler::handlePipelineFinish(const PipelineEvent & event)
+void DAGScheduler::handlePipelineFinish(const PipelineEvent & event [[maybe_unused]])
 {
     assert(event.type == PipelineEventType::finish);
     event_queue->finish();

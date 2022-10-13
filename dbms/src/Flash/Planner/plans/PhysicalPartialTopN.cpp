@@ -59,6 +59,5 @@ void PhysicalPartialTopN::transform(TransformsPipeline & pipeline, Context & con
         transforms->append(std::make_shared<ExpressionTransform>(before_sort_actions));
         transforms->setSink(std::make_shared<TopNSink>(order_descr, limit, topn_breaker));
     });
-    topn_breaker->initHeader(pipeline.getHeader());
 }
 } // namespace DB

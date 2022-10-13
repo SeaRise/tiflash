@@ -17,6 +17,27 @@
 
 namespace DB
 {
+namespace
+{
+class AllLock
+{
+public:
+    explicit AllLock(std::vector<std::mutex> & mutexes_): mutexes(mutexes_)
+    {
+        for (auto & mutex : mutexes)
+            mutex.lock();
+    }
+
+    ~AllLock()
+    {
+        for (auto & mutex : mutexes)
+            mutex.unlock();
+    }
+private:
+    std::vector<std::mutex> & mutexes;
+};
+}
+
 AggregateStore::AggregateStore(
     const String & req_id,
     const FileProviderPtr & file_provider_,
@@ -28,7 +49,9 @@ AggregateStore::AggregateStore(
 
 void AggregateStore::init(size_t max_threads_, const Aggregator::Params & params)
 {
-    assert(!inited);
+    std::unique_lock init_lock(init_mutex);
+    if (inited)
+        return;
     inited = true;
 
     max_threads = max_threads_;
@@ -42,25 +65,38 @@ void AggregateStore::init(size_t max_threads_, const Aggregator::Params & params
     for (size_t i = 0; i < max_threads; ++i)
         threads_data.emplace_back(params.keys_size, params.aggregates_size);
 
-    mutexes = std::make_unique<std::vector<std::shared_mutex>>(max_threads);
+    mutexes = std::make_unique<std::vector<std::mutex>>(max_threads);
 
     aggregator = std::make_unique<Aggregator>(params, log->identifier());
 }
 
+size_t AggregateStore::maxThreads() const
+{
+    std::shared_lock init_lock(init_mutex);
+    assert(inited);
+    return max_threads;
+}
+
 Block AggregateStore::getHeader() const
 {
+    std::shared_lock init_lock(init_mutex);
+    assert(inited);
     return aggregator->getHeader(is_final);
 }
 
 void AggregateStore::executeOnBlock(size_t index, const Block & block)
 {
+    std::shared_lock init_lock(init_mutex);
+    assert(inited);
     assert(index < max_threads);
-    std::unique_lock lock((*mutexes)[index]);
+    std::lock_guard lock((*mutexes)[index]);
     executeOnBlockWithoutLock(index, block);
 }
 
 void AggregateStore::executeOnBlockWithoutLock(size_t index, const Block & block)
 {
+    std::shared_lock init_lock(init_mutex);
+    assert(inited);
     assert(index < max_threads);
     auto & thread_data = threads_data[index];
     aggregator->executeOnBlock(
@@ -76,18 +112,11 @@ void AggregateStore::executeOnBlockWithoutLock(size_t index, const Block & block
     thread_data.src_bytes += block.bytes();
 }
 
-void AggregateStore::tryFlush(size_t) {}
-
-void AggregateStore::tryFlush() {}
-
-std::unique_ptr<IBlockInputStream> AggregateStore::merge()
+bool AggregateStore::isTwoLevel()
 {
-    RUNTIME_ASSERT(!aggregator->hasTemporaryFiles());
-    return aggregator->mergeAndConvertToBlocks(many_data, is_final, max_threads, true);
-}
-
-bool AggregateStore::isTwoLevel() const
-{
+    std::shared_lock init_lock(init_mutex);
+    assert(inited);
+    std::lock_guard lock((*mutexes)[0]);
     assert(impl);
     assert(!many_data.empty());
     return many_data[0]->isTwoLevel();
@@ -95,20 +124,20 @@ bool AggregateStore::isTwoLevel() const
 
 void AggregateStore::initForMerge()
 {
+    std::shared_lock init_lock(init_mutex);
+    assert(inited);
+    AllLock lock(*mutexes);
     RUNTIME_ASSERT(!aggregator->hasTemporaryFiles());
     assert(!impl);
     impl = aggregator->mergeAndConvertToBlocks(many_data, is_final, max_threads, true);
 }
 
+// don't need to lock here.
 Block AggregateStore::readForMerge()
 {
+    std::shared_lock init_lock(init_mutex);
+    assert(inited);
     assert(impl);
     return impl->read();
-}
-
-Block AggregateStore::getHeaderForMerge()
-{
-    assert(impl);
-    return impl->getHeader();
 }
 } // namespace DB

@@ -65,19 +65,13 @@ public:
     void executeOnBlock(size_t index, const Block & block);
     void executeOnBlockWithoutLock(size_t index, const Block & block);
 
-    void tryFlush(size_t);
-
-    void tryFlush();
-
-    std::unique_ptr<IBlockInputStream> merge();
-
-    bool isTwoLevel() const;
+    bool isTwoLevel();
 
     void initForMerge();
 
     Block readForMerge();
 
-    Block getHeaderForMerge();
+    size_t maxThreads() const;
 
 public:
     const FileProviderPtr file_provider;
@@ -93,8 +87,9 @@ private:
 
     std::unique_ptr<Aggregator> aggregator;
 
+    mutable std::shared_mutex init_mutex;
     std::vector<ThreadData> threads_data;
-    std::unique_ptr<std::vector<std::shared_mutex>> mutexes;
+    std::unique_ptr<std::vector<std::mutex>> mutexes;
     ManyAggregatedDataVariants many_data;
 
     // for read

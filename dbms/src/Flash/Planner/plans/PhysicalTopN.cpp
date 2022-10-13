@@ -68,7 +68,8 @@ PhysicalPlanNodePtr PhysicalTopN::build(
             order_descr,
             log->identifier(),
             settings.max_block_size,
-            top_n.limit());
+            top_n.limit(),
+            before_sort_actions->getSampleBlock());
 
         auto physical_partial_topn = std::make_shared<PhysicalPartialTopN>(
             executor_id,

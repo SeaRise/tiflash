@@ -17,6 +17,7 @@
 #include <Core/Block.h>
 #include <Core/SortDescription.h>
 #include <DataStreams/IBlockInputStream.h>
+#include <DataStreams/materializeBlock.h>
 
 #include <atomic>
 #include <memory>
@@ -26,9 +27,11 @@ namespace DB
 class LimitBreaker
 {
 public:
-    explicit LimitBreaker(
+    LimitBreaker(
+        const Block & sample_block,
         size_t limit_)
-        : limit(limit_)
+        : header(materializeBlock(sample_block))
+        , limit(limit_)
     {
         if (limit == 0)
             is_stop = true;
@@ -79,15 +82,7 @@ public:
         return block;
     }
 
-    void initHeader(const Block & header_)
-    {
-        header = header_;
-    }
-
-    Block getHeader()
-    {
-        return header;
-    }
+    Block getHeader() const { return header; }
 
 private:
     Block header;

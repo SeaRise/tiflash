@@ -50,9 +50,7 @@ public:
     void transform(TransformsPipeline & pipeline, Context & context, size_t concurrency) override;
 
 private:
-    void buildSideTransform(DAGPipeline & build_pipeline, Context & context, size_t max_streams);
-
-    void transformImpl(DAGPipeline & pipeline, Context & context, size_t max_streams) override;
+    void transformImpl(DAGPipeline &, Context &, size_t) override;
 
 private:
     JoinPtr join_ptr;

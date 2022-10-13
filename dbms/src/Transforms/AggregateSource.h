@@ -34,7 +34,7 @@ public:
 
     Block getHeader() const override
     {
-        return agg_store->getHeaderForMerge();
+        return agg_store->getHeader();
     }
 
 private:

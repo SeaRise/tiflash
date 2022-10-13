@@ -45,35 +45,9 @@
 
 namespace DB
 {
-void PhysicalJoinBuild::buildSideTransform(DAGPipeline & build_pipeline, Context & context, size_t max_streams)
+void PhysicalJoinBuild::transformImpl(DAGPipeline &, Context &, size_t)
 {
-    auto & dag_context = *context.getDAGContext();
-    const auto & settings = context.getSettingsRef();
-
-    size_t join_build_concurrency = settings.join_concurrent_build ? std::min(max_streams, build_pipeline.streams.size()) : 1;
-
-    /// build side streams
-    executeExpression(build_pipeline, build_side_prepare_actions, log, "append join key and join filters for build side");
-    // add a HashJoinBuildBlockInputStream to build a shared hash table
-    auto get_concurrency_build_index = JoinInterpreterHelper::concurrencyBuildIndexGenerator(join_build_concurrency);
-    String join_build_extra_info = fmt::format("join build, build_side_root_executor_id = {}", child->execId());
-    auto & join_execute_info = dag_context.getJoinExecuteInfoMap()[execId()];
-    build_pipeline.transform([&](auto & stream) {
-        stream = std::make_shared<HashJoinBuildBlockInputStream>(stream, join_ptr, get_concurrency_build_index(), log->identifier());
-        stream->setExtraInfo(join_build_extra_info);
-        join_execute_info.join_build_streams.push_back(stream);
-    });
-    if (!join_ptr->initialized)
-    {
-        join_ptr->init(build_pipeline.firstStream()->getHeader(), join_build_concurrency);
-    }
-}
-
-void PhysicalJoinBuild::transformImpl(DAGPipeline & pipeline, Context & context, size_t max_streams)
-{
-    child->transform(pipeline, context, max_streams);
-
-    buildSideTransform(pipeline, context, max_streams);
+    throw Exception("Unsupport");
 }
 
 void PhysicalJoinBuild::transform(TransformsPipeline & pipeline, Context & context, size_t concurrency)
@@ -86,10 +60,7 @@ void PhysicalJoinBuild::transform(TransformsPipeline & pipeline, Context & conte
         transforms->append(std::make_shared<ExpressionTransform>(build_side_prepare_actions));
         transforms->setSink(std::make_shared<HashJoinBuildSink>(join_ptr, get_concurrency_build_index()));
     });
-    if (!join_ptr->initialized)
-    {
-        join_ptr->init(pipeline.getHeader(), join_build_concurrency);
-    }
+    join_ptr->init(pipeline.getHeader(), join_build_concurrency);
 }
 
 void PhysicalJoinBuild::finalize(const Names & parent_require)

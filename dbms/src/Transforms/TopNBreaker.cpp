@@ -28,16 +28,10 @@ void TopNBreaker::add(Blocks && local_blocks)
     local_blocks = {};
 }
 
-void TopNBreaker::initHeader(const Block & header_)
-{
-    assert(!header);
-    header = header_.cloneEmpty();
-}
-
 Block TopNBreaker::read()
 {
-    assert(impl);
     std::lock_guard<std::mutex> lock(mu);
+    assert(impl);
     return impl->read();
 }
 
@@ -58,7 +52,6 @@ void TopNBreaker::initForRead()
 
 Block TopNBreaker::getHeader()
 {
-    assert(impl);
-    return impl->getHeader();
+    return header;
 }
 } // namespace DB

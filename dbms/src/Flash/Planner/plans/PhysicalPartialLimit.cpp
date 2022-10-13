@@ -41,6 +41,5 @@ void PhysicalPartialLimit::transform(TransformsPipeline & pipeline, Context & co
     pipeline.transform([&](auto & transforms) {
         transforms->setSink(std::make_shared<LimitSink>(limit_breaker));
     });
-    limit_breaker->initHeader(pipeline.getHeader());
 }
 } // namespace DB

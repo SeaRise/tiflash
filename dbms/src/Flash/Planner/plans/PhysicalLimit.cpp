@@ -45,7 +45,7 @@ PhysicalPlanNodePtr PhysicalLimit::build(
     }
     else
     {
-        LimitBreakerPtr limit_breaker = std::make_shared<LimitBreaker>(limit.limit());
+        LimitBreakerPtr limit_breaker = std::make_shared<LimitBreaker>(child->getSampleBlock(), limit.limit());
 
         auto physical_partial_limit = std::make_shared<PhysicalPartialLimit>(
             executor_id,

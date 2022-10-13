@@ -476,7 +476,7 @@ void Join::init(const Block & sample_block, size_t build_concurrency_)
 {
     std::unique_lock lock(rwlock);
     if (unlikely(initialized))
-        throw Exception("Logical error: Join has been initialized", ErrorCodes::LOGICAL_ERROR);
+        return;
     initialized = true;
     setBuildConcurrencyAndInitPool(build_concurrency_);
     /// Choose data structure to use for JOIN.

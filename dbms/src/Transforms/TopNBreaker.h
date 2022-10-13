@@ -17,6 +17,7 @@
 #include <Core/Block.h>
 #include <Core/SortDescription.h>
 #include <DataStreams/IBlockInputStream.h>
+#include <DataStreams/materializeBlock.h>
 
 #include <memory>
 
@@ -30,30 +31,29 @@ public:
         const SortDescription & description_,
         const String & req_id_,
         size_t max_merged_block_size_,
-        size_t limit_)
+        size_t limit_,
+        const Block & sample_block)
         : description(description_)
         , req_id(req_id_)
         , max_merged_block_size(max_merged_block_size_)
         , limit(limit_)
+        , header(materializeBlock(sample_block))
     {}
 
     void add(Blocks && local_blocks);
 
     Block read();
 
-    void initHeader(const Block & header_);
-
     void initForRead();
 
     Block getHeader();
 
 private:
-    Block header;
-
     SortDescription description;
     String req_id;
     size_t max_merged_block_size;
     size_t limit;
+    Block header;
 
     std::mutex mu;
     Blocks blocks;

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <DataStreams/FinalAggregatingBlockInputStream.h>
 #include <Flash/Coprocessor/DAGContext.h>
 #include <Flash/Coprocessor/InterpreterUtils.h>
 #include <Flash/Planner/FinalizeHelper.h>
@@ -20,7 +19,6 @@
 #include <Interpreters/Context.h>
 #include <Transforms/AggregateSource.h>
 #include <Transforms/ExpressionTransform.h>
-#include <Transforms/FinalAggregateReader.h>
 #include <Transforms/TransformsPipeline.h>
 
 namespace DB
@@ -36,22 +34,16 @@ const Block & PhysicalFinalAggregation::getSampleBlock() const
     return expr_after_agg->getSampleBlock();
 }
 
-void PhysicalFinalAggregation::transformImpl(DAGPipeline & pipeline, Context & /*context*/, size_t max_streams)
+void PhysicalFinalAggregation::transformImpl(DAGPipeline &, Context &, size_t)
 {
-    assert(pipeline.streams.empty() && pipeline.streams_with_non_joined_data.empty());
-    auto reader = std::make_shared<FinalAggregateReader>(aggregate_store);
-    for (size_t i = 0; i < max_streams; ++i)
-    {
-        pipeline.streams.push_back(std::make_shared<FinalAggregatingBlockInputStream>(reader, log->identifier()));
-    }
-    executeExpression(pipeline, expr_after_agg, log, "expr after aggregation");
+    throw Exception("Unsupport");
 }
 
 void PhysicalFinalAggregation::transform(TransformsPipeline & pipeline, Context & /*context*/, size_t concurrency)
 {
     aggregate_store->initForMerge();
     size_t max_threads = aggregate_store->isTwoLevel()
-        ? std::min(concurrency, aggregate_store->max_threads)
+        ? std::min(concurrency, aggregate_store->maxThreads())
         : 1;
     pipeline.init(max_threads);
     pipeline.transform([&](auto & transforms) {

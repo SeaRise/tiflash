@@ -18,14 +18,16 @@
 #include <Flash/Pipeline/task/PipelineTask.h>
 #include <Flash/Planner/PhysicalPlanNode.h>
 #include <Transforms/Transforms.h>
-#include <Flash/Pipeline/dag/PipelineSignal.h>
 
 #include <unordered_set>
 
 namespace DB
 {
-class PipelineEventQueue;
-using PipelineEventQueuePtr = std::shared_ptr<PipelineEventQueue>;
+class PipelineSignal;
+using PipelineSignalPtr = std::shared_ptr<PipelineSignal>;
+
+class PipelineTrigger;
+using PipelineTriggerPtr = std::shared_ptr<PipelineTrigger>;
 
 class Pipeline
 {
@@ -34,16 +36,11 @@ public:
         const PhysicalPlanNodePtr & plan_node_,
         const MPPTaskId & mpp_task_id_,
         UInt32 id_,
-        const std::unordered_set<UInt32> & parent_ids_,
-        const PipelineEventQueuePtr & event_queue_,
         const String & req_id);
 
     std::vector<PipelineTaskPtr> transform(Context & context, size_t concurrency);
 
     UInt32 getId() const { return id; }
-    const std::unordered_set<UInt32> & getParentIds() const { return parent_ids; }
-
-    void cancel(bool is_kill);
 
     PhysicalPlanNodePtr getPlanNode() const 
     {
@@ -53,6 +50,10 @@ public:
 
     String toString() const;
 
+    void setSignal(const PipelineSignalPtr & signal_);
+    PipelineSignalPtr getSignal() const;
+    void addNextPipelineTrigger(const PipelineTriggerPtr & next_trigger);
+
 private:
     PhysicalPlanNodePtr plan_node;
 
@@ -60,9 +61,8 @@ private:
 
     UInt32 id;
 
-    std::unordered_set<UInt32> parent_ids;
-
     PipelineSignalPtr signal;
+    std::vector<PipelineTriggerPtr> next_triggers;
 
     LoggerPtr log;
 };

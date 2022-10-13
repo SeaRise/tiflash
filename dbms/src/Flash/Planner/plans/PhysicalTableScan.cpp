@@ -23,7 +23,6 @@
 #include <Flash/Planner/plans/PhysicalTableScan.h>
 #include <Interpreters/Context.h>
 #include <Transforms/ExpressionTransform.h>
-#include <Transforms/TransformsPipeline.h>
 
 namespace DB
 {
@@ -83,11 +82,11 @@ void PhysicalTableScan::transformImpl(DAGPipeline & pipeline, Context & context,
     executeExpression(pipeline, schema_project, log, "table scan schema projection");
 }
 
-void PhysicalTableScan::transform(TransformsPipeline & pipeline, Context & context, size_t concurrency)
+void PhysicalTableScan::preTransform(Context & context)
 {
     RUNTIME_CHECK(!tidb_table_scan.keepOrder());
-    DAGStorageInterpreter storage_interpreter(context, tidb_table_scan, push_down_filter, concurrency);
-    storage_interpreter.execute(pipeline);
+    DAGStorageInterpreter storage_interpreter(context, tidb_table_scan, push_down_filter, context.getMaxStreams());
+    storage_interpreter.execute(scan_pipeline);
 
     const auto & storage_schema = storage_interpreter.analyzer->getCurrentInputColumns();
     RUNTIME_CHECK(
@@ -108,11 +107,17 @@ void PhysicalTableScan::transform(TransformsPipeline & pipeline, Context & conte
     }
     /// In order to keep BlockInputStream's schema consistent with PhysicalPlan's schema.
     /// It is worth noting that the column uses the name as the unique identifier in the Block, so the column name must also be consistent.
-    ExpressionActionsPtr schema_actions = PhysicalPlanHelper::newActions(pipeline.getHeader(), context);
+    ExpressionActionsPtr schema_actions = PhysicalPlanHelper::newActions(scan_pipeline.getHeader(), context);
     schema_actions->add(ExpressionAction::project(schema_project_cols));
-    pipeline.transform([&](auto & transforms) {
+    scan_pipeline.transform([&](auto & transforms) {
         transforms->append(std::make_shared<ExpressionTransform>(schema_actions));
     });
+}
+
+void PhysicalTableScan::transform(TransformsPipeline & pipeline, Context &, size_t)
+{
+    RUNTIME_CHECK(scan_pipeline.concurrency() > 0);
+    pipeline = scan_pipeline;
 }
 
 void PhysicalTableScan::finalize(const Names & parent_require)

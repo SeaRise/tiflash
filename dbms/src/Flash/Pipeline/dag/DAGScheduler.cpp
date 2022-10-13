@@ -23,6 +23,8 @@
 #include <Storages/Transaction/TMTContext.h>
 #include <Flash/Pipeline/dag/PipelineEventQueue.h>
 #include <Flash/Pipeline/dag/PipelineEvent.h>
+#include <Flash/Pipeline/dag/PipelineTrigger.h>
+#include <Flash/Pipeline/dag/PipelineSignal.h>
 
 #include <magic_enum.hpp>
 
@@ -47,10 +49,9 @@ std::pair<bool, String> DAGScheduler::run(
     assert(plan_node);
     PipelineIDGenerator id_generator;
     auto final_pipeline = genPipeline(handleResultHandler(plan_node, result_handler), id_generator);
-    final_pipeline_id = final_pipeline->getId();
-    LOG_FMT_DEBUG(log, "pipeline dag:\n{}", pipelineDAGToString(final_pipeline_id));
+    final_pipeline->getSignal()->setIsFinal();
 
-    submitPipeline(final_pipeline);
+    submitInitPipeline();
 
     PipelineEvent event;
     String err_msg;
@@ -78,16 +79,6 @@ std::pair<bool, String> DAGScheduler::run(
     return {event_queue_status == PipelineEventQueueStatus::finished, err_msg};
 }
 
-String DAGScheduler::pipelineDAGToString(UInt32 pipeline_id) const
-{
-    FmtBuffer fb;
-    auto pipeline = status_machine.getPipeline(pipeline_id);
-    fb.fmtAppend("id: {}, parents: [{}]\n", pipeline_id, fmt::join(pipeline->getParentIds(), ", "));
-    for (auto parent_id : pipeline->getParentIds())
-        fb.append(pipelineDAGToString(parent_id));
-    return fb.toString();
-}
-
 PhysicalPlanNodePtr DAGScheduler::handleResultHandler(
     const PhysicalPlanNodePtr & plan_node,
     ResultHandler result_handler)
@@ -104,50 +95,51 @@ void DAGScheduler::handlePipelineCancel(const PipelineEvent & event)
 {
     assert(event.type == PipelineEventType::cancel);
     event_queue->cancel();
-    cancelRunningPipelines(event.is_kill);
-    status_machine.finish();
+    cancelPipelines(event.is_kill);
+    pipeline_signals.clear();
 }
 
-void DAGScheduler::cancelRunningPipelines(bool is_kill)
+void DAGScheduler::cancelPipelines(bool is_kill)
 {
-    auto running_pipelines = status_machine.getRunningPipelines();
-    for (auto & running_pipeline : running_pipelines)
-        running_pipeline->cancel(is_kill);
+    for (const auto & signal : pipeline_signals)
+        signal->cancel(is_kill);
 }
 
 String DAGScheduler::handlePipelineFail(const PipelineEvent & event)
 {
     assert(event.type == PipelineEventType::fail);
     event_queue->cancel();
-    cancelRunningPipelines(false);
-    status_machine.finish();
+    cancelPipelines(false);
+    pipeline_signals.clear();
     return event.err_msg;
 }
 
 void DAGScheduler::handlePipelineFinish(const PipelineEvent & event)
 {
     assert(event.type == PipelineEventType::finish);
-    auto pipeline = status_machine.getPipeline(event.pipeline_id);
-    LOG_DEBUG(log, "pipeline {} finished", pipeline->toString());
-    status_machine.stateToComplete(event.pipeline_id);
-    if (event.pipeline_id == final_pipeline_id)
-    {
-        event_queue->finish();
-        status_machine.finish();
-    }
-    else
-    {
-        submitNext(pipeline);
-    }
+    event_queue->finish();
+    pipeline_signals.clear();
 }
 
 PipelinePtr DAGScheduler::genPipeline(const PhysicalPlanNodePtr & plan_node, PipelineIDGenerator & id_generator)
 {
-    const auto & parent_ids = createParentPipelines(plan_node, id_generator);
     auto id = id_generator.nextID();
-    auto pipeline = std::make_shared<Pipeline>(plan_node, mpp_task_id, id, parent_ids, event_queue, log->identifier());
-    status_machine.addPipeline(pipeline);
+    auto pipeline = std::make_shared<Pipeline>(plan_node, mpp_task_id, id, log->identifier());
+    addPipeline(pipeline);
+    auto trigger = std::make_shared<PipelineTrigger>(pipeline, task_scheduler, context);
+    const auto & parent_pipelines = createParentPipelines(plan_node, id_generator);
+    for (const auto & parent_pipeline : parent_pipelines)
+        parent_pipeline->addNextPipelineTrigger(trigger);
+    if (parent_pipelines.empty())
+        init_pipelines.emplace_back(pipeline);
     return createNonJoinedPipelines(pipeline, id_generator);
+}
+
+void DAGScheduler::addPipeline(const PipelinePtr & pipeline)
+{
+    auto signal = std::make_shared<PipelineSignal>(event_queue);
+    pipeline->setSignal(signal);
+    pipeline_signals.emplace_back(signal);
 }
 
 PipelinePtr DAGScheduler::createNonJoinedPipelines(const PipelinePtr & pipeline, PipelineIDGenerator & id_generator)
@@ -187,25 +179,30 @@ PipelinePtr DAGScheduler::createNonJoinedPipelines(const PipelinePtr & pipeline,
         return root;
     };
 
-    std::unordered_set<UInt32> parent_pipelines;
-    parent_pipelines.insert(pipeline->getId());
+    std::vector<PipelinePtr> parent_pipelines;
+    parent_pipelines.emplace_back(pipeline);
     PipelinePtr return_pipeline = pipeline;
     for (int i = non_joined.size() - 1; i >= 0; --i)
     {
         auto [index, non_joined_plan] = non_joined[i];
         auto id = id_generator.nextID();
         auto non_joined_root = gen_plan_tree(pipeline->getPlanNode(), index, non_joined_plan);
-        auto non_joined_pipeline = std::make_shared<Pipeline>(non_joined_root, mpp_task_id, id, parent_pipelines, event_queue, log->identifier());
-        status_machine.addPipeline(non_joined_pipeline);
-        parent_pipelines.insert(id);
+        auto non_joined_pipeline = std::make_shared<Pipeline>(non_joined_root, mpp_task_id, id, log->identifier());
+        addPipeline(non_joined_pipeline);
+
+        auto trigger = std::make_shared<PipelineTrigger>(non_joined_pipeline, task_scheduler, context);
+        for (const auto & parent_pipeline : parent_pipelines)
+            parent_pipeline->addNextPipelineTrigger(trigger);
+        parent_pipelines.emplace_back(non_joined_pipeline);
+
         return_pipeline = non_joined_pipeline;
     }
     return return_pipeline;
 }
 
-std::unordered_set<UInt32> DAGScheduler::createParentPipelines(const PhysicalPlanNodePtr & plan_node, PipelineIDGenerator & id_generator)
+std::vector<PipelinePtr> DAGScheduler::createParentPipelines(const PhysicalPlanNodePtr & plan_node, PipelineIDGenerator & id_generator)
 {
-    std::unordered_set<UInt32> parent_ids;
+    std::vector<PipelinePtr> parent_pipelines;
     for (size_t i = 0; i < plan_node->childrenSize(); ++i)
     {
         const auto & child = plan_node->children(i);
@@ -215,57 +212,29 @@ std::unordered_set<UInt32> DAGScheduler::createParentPipelines(const PhysicalPla
         {
             // PhysicalPipelineBreaker cannot be the root node.
             auto physical_breaker = std::static_pointer_cast<PhysicalPipelineBreaker>(child);
-            parent_ids.insert(genPipeline(physical_breaker->before(), id_generator)->getId());
+            parent_pipelines.emplace_back(genPipeline(physical_breaker->before(), id_generator));
 
             // remove PhysicalAggregation
             plan_node->setChild(0, physical_breaker->after());
-            const auto & ids = createParentPipelines(physical_breaker->after(), id_generator);
-            parent_ids.insert(ids.cbegin(), ids.cend());
+            const auto & pipelines = createParentPipelines(physical_breaker->after(), id_generator);
+            parent_pipelines.insert(parent_pipelines.end(), pipelines.cbegin(), pipelines.cend());
             break;
         }
         default:
         {
-            const auto & ids = createParentPipelines(child, id_generator);
-            parent_ids.insert(ids.cbegin(), ids.cend());
+            const auto & pipelines = createParentPipelines(child, id_generator);
+            parent_pipelines.insert(parent_pipelines.end(), pipelines.cbegin(), pipelines.cend());
+            break;
         }
         }
     }
-    return parent_ids;
+    return parent_pipelines;
 }
 
-void DAGScheduler::submitPipeline(const PipelinePtr & pipeline)
+void DAGScheduler::submitInitPipeline()
 {
-    assert(pipeline);
-
-    if (status_machine.isRunning(pipeline->getId()) || status_machine.isCompleted(pipeline->getId()))
-        return;
-
-    bool is_ready_for_run = true;
-    for (const auto & parent_id : pipeline->getParentIds())
-    {
-        if (!status_machine.isCompleted(parent_id))
-        {
-            is_ready_for_run = false;
-            submitPipeline(status_machine.getPipeline(parent_id));
-        }
-    }
-
-    if (is_ready_for_run)
-    {
-        status_machine.stateToRunning(pipeline->getId());
-        task_scheduler.submit(pipeline, context);
-    }
-    else
-    {
-        status_machine.stateToWaiting(pipeline->getId());
-    }
-}
-
-void DAGScheduler::submitNext(const PipelinePtr & pipeline)
-{
-    const auto & next_pipelines = status_machine.nextPipelines(pipeline->getId());
-    assert(!next_pipelines.empty());
-    for (const auto & next_pipeline : next_pipelines)
-        submitPipeline(next_pipeline);
+    for (const auto & init_pipeline : init_pipelines)
+        task_scheduler.submit(init_pipeline, context);
+    init_pipelines.clear();
 }
 } // namespace DB

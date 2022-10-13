@@ -25,19 +25,20 @@ namespace DB
 class PipelineEventQueue;
 using PipelineEventQueuePtr = std::shared_ptr<PipelineEventQueue>;
 
+class PipelineTrigger;
+using PipelineTriggerPtr = std::shared_ptr<PipelineTrigger>;
+
 class PipelineSignal
 {
 public:
-    PipelineSignal(
-        UInt32 pipeline_id_, 
-        const PipelineEventQueuePtr & event_queue_)
-        : pipeline_id(pipeline_id_)
-        , event_queue(event_queue_)
-    {}
+    explicit PipelineSignal(const PipelineEventQueuePtr & event_queue_): event_queue(event_queue_) {}
 
     void init(UInt16 active_task_num_);
 
-    void finish();
+    void setIsFinal() { is_final = true; }
+
+    void finish(const std::vector<PipelineTriggerPtr> & next_triggers);
+    bool isFinished();
 
     void error(const String & err_msg);
 
@@ -47,7 +48,7 @@ public:
     bool isKilled();
 
 private:
-    UInt32 pipeline_id;
+    bool is_final = false;
     PipelineEventQueuePtr event_queue;
 
     std::atomic_uint16_t active_task_num;

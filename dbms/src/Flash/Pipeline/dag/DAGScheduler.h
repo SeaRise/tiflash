@@ -18,7 +18,6 @@
 #include <Flash/Executor/ResultHandler.h>
 #include <Flash/Mpp/MPPTaskId.h>
 #include <Flash/Pipeline/dag/Pipeline.h>
-#include <Flash/Pipeline/dag/PipelineStatusMachine.h>
 #include <Flash/Planner/PhysicalPlanNode.h>
 
 namespace DB
@@ -37,6 +36,9 @@ public:
 struct PipelineEvent;
 class PipelineEventQueue;
 using PipelineEventQueuePtr = std::shared_ptr<PipelineEventQueue>;
+
+class PipelineSignal;
+using PipelineSignalPtr = std::shared_ptr<PipelineSignal>;
 
 class TaskScheduler;
 class DAGScheduler
@@ -59,13 +61,11 @@ public:
 private:
     PipelinePtr genPipeline(const PhysicalPlanNodePtr & plan_node, PipelineIDGenerator & id_generator);
 
-    std::unordered_set<UInt32> createParentPipelines(const PhysicalPlanNodePtr & plan_node, PipelineIDGenerator & id_generator);
+    std::vector<PipelinePtr> createParentPipelines(const PhysicalPlanNodePtr & plan_node, PipelineIDGenerator & id_generator);
 
     PipelinePtr createNonJoinedPipelines(const PipelinePtr & pipeline, PipelineIDGenerator & id_generator);
 
-    void submitPipeline(const PipelinePtr & pipeline);
-
-    void submitNext(const PipelinePtr & pipeline);
+    void submitInitPipeline();
 
     void handlePipelineFinish(const PipelineEvent & event);
 
@@ -73,18 +73,17 @@ private:
 
     void handlePipelineCancel(const PipelineEvent & event);
 
-    void cancelRunningPipelines(bool is_kill);
+    void cancelPipelines(bool is_kill);
 
     PhysicalPlanNodePtr handleResultHandler(
         const PhysicalPlanNodePtr & plan_node,
         ResultHandler result_handler);
 
-    String pipelineDAGToString(UInt32 pipeline_id) const;
+    void addPipeline(const PipelinePtr & pipeline);
 
 private:
-    UInt32 final_pipeline_id;
-
-    PipelineStatusMachine status_machine;
+    std::vector<PipelineSignalPtr> pipeline_signals;
+    std::vector<PipelinePtr> init_pipelines;
 
     Context & context;
 

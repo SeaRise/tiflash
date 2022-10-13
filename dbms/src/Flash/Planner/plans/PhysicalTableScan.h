@@ -15,6 +15,7 @@
 #include <Flash/Coprocessor/PushDownFilter.h>
 #include <Flash/Coprocessor/TiDBTableScan.h>
 #include <Flash/Planner/plans/PhysicalLeaf.h>
+#include <Transforms/TransformsPipeline.h>
 #include <tipb/executor.pb.h>
 
 namespace DB
@@ -50,7 +51,9 @@ public:
         return clone_one;
     }
 
-    void transform(TransformsPipeline & pipeline, Context & context, size_t concurrency) override;
+    void transform(TransformsPipeline & pipeline, Context &, size_t) override;
+
+    void preTransform(Context & context);
 
 private:
     void transformImpl(DAGPipeline & pipeline, Context & context, size_t max_streams) override;
@@ -61,5 +64,9 @@ private:
     TiDBTableScan tidb_table_scan;
 
     Block sample_block;
+
+    // hack for pipeline model.
+    // avoid read/wait index in event loop
+    TransformsPipeline scan_pipeline;
 };
 } // namespace DB

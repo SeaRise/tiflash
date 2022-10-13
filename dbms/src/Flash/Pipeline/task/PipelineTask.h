@@ -38,6 +38,9 @@ enum class PipelineTaskStatus
 class PipelineSignal;
 using PipelineSignalPtr = std::shared_ptr<PipelineSignal>;
 
+class PipelineTrigger;
+using PipelineTriggerPtr = std::shared_ptr<PipelineTrigger>;
+
 class PipelineTask
 {
 public:
@@ -46,12 +49,14 @@ public:
         UInt32 pipeline_id_,
         const MPPTaskId & mpp_task_id_,
         const TransformsPtr & transforms_,
-        const PipelineSignalPtr & signal_)
+        const PipelineSignalPtr & signal_,
+        const std::vector<PipelineTriggerPtr> & next_triggers_)
         : task_id(task_id_)
         , pipeline_id(pipeline_id_)
         , mpp_task_id(mpp_task_id_)
         , transforms(transforms_)
         , signal(signal_)
+        , next_triggers(next_triggers_)
         , mem_tracker(current_memory_tracker ? current_memory_tracker->shared_from_this() : nullptr)
         , logger(Logger::get("PipelineTask", fmt::format("{{mpp_task_id: {}, pipeline_id: {}, task_id: {}}}", mpp_task_id.toString(), pipeline_id, task_id)))
     {}
@@ -87,6 +92,7 @@ private:
 
     TransformsPtr transforms;
     PipelineSignalPtr signal;
+    std::vector<PipelineTriggerPtr> next_triggers;
     std::shared_ptr<MemoryTracker> mem_tracker;
     LoggerPtr logger;
 };

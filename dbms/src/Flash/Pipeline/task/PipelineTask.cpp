@@ -123,7 +123,7 @@ void PipelineTask::execute()
 void PipelineTask::finish()
 {
     changeStatus(PipelineTaskStatus::finish);
-    signal->finish();
+    signal->finish(next_triggers);
 }
 
 void PipelineTask::error(const String & err_msg)

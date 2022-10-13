@@ -14,6 +14,7 @@
 
 #include <Flash/Pipeline/dag/PipelineSignal.h>
 #include <Flash/Pipeline/dag/PipelineEventQueue.h>
+#include <Flash/Pipeline/dag/PipelineTrigger.h>
 
 namespace DB
 {
@@ -41,10 +42,27 @@ bool PipelineSignal::isKilled()
 }
 
 // call in task scheduler
-void PipelineSignal::finish()
+void PipelineSignal::finish(const std::vector<PipelineTriggerPtr> & next_triggers)
 {
     if (1 == active_task_num.fetch_sub(1))
-        event_queue->submit(PipelineEvent::finish(pipeline_id));
+    {
+        if (is_final)
+            event_queue->submit(PipelineEvent::finish());
+        else
+        {
+            assert(!next_triggers.empty());
+            for (const auto & next_trigger : next_triggers)
+            {
+                assert(next_trigger);
+                next_trigger->trigger();  
+            }
+        }
+    }
+}
+
+bool PipelineSignal::isFinished()
+{
+    return 0 == active_task_num.load();
 }
 
 // call in task scheduler

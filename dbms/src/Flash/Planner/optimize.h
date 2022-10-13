@@ -20,5 +20,5 @@
 namespace DB
 {
 class Context;
-PhysicalPlanNodePtr optimize(const Context & context, PhysicalPlanNodePtr plan, const LoggerPtr & log);
+PhysicalPlanNodePtr optimize(Context & context, PhysicalPlanNodePtr plan, const LoggerPtr & log);
 } // namespace DB

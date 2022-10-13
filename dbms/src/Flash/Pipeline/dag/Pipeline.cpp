@@ -17,7 +17,7 @@
 #include <Flash/Planner/PhysicalPlanVisitor.h>
 #include <Interpreters/Context.h>
 #include <Transforms/TransformsPipeline.h>
-#include <Flash/Pipeline/dag/PipelineEventQueue.h>
+#include <Flash/Pipeline/dag/PipelineTrigger.h>
 #include <Flash/Pipeline/dag/PipelineSignal.h>
 
 namespace DB
@@ -31,14 +31,10 @@ Pipeline::Pipeline(
     const PhysicalPlanNodePtr & plan_node_,
     const MPPTaskId & mpp_task_id_,
     UInt32 id_,
-    const std::unordered_set<UInt32> & parent_ids_,
-    const PipelineEventQueuePtr & event_queue_,
     const String & req_id)
     : plan_node(plan_node_)
     , mpp_task_id(mpp_task_id_)
     , id(id_)
-    , parent_ids(parent_ids_)
-    , signal(std::make_shared<PipelineSignal>(id_, event_queue_))
     , log(Logger::get("Pipeline", req_id, fmt::format("<pipeline_id:{}>", id)))
 {
     assert(plan_node);
@@ -55,14 +51,26 @@ std::vector<PipelineTaskPtr> Pipeline::transform(Context & context, size_t concu
     std::vector<PipelineTaskPtr> tasks;
     tasks.reserve(pipeline.concurrency());
     UInt16 active_task_num = pipeline.concurrency();
+    assert(signal);
     signal->init(active_task_num);
     for (const auto & transforms : pipeline.transforms_vec)
-        tasks.emplace_back(std::make_unique<PipelineTask>(--active_task_num, id, mpp_task_id, transforms, signal));
+        tasks.emplace_back(std::make_unique<PipelineTask>(--active_task_num, id, mpp_task_id, transforms, signal, next_triggers));
     return tasks;
 }
 
-void Pipeline::cancel(bool is_kill)
+void Pipeline::setSignal(const PipelineSignalPtr & signal_)
 {
-    signal->cancel(is_kill);
+    signal = signal_;
+}
+
+PipelineSignalPtr Pipeline::getSignal() const
+{
+    return signal;
+}
+
+void Pipeline::addNextPipelineTrigger(const PipelineTriggerPtr & next_trigger)
+{
+    next_trigger->addDependency(signal);
+    next_triggers.emplace_back(next_trigger);
 }
 } // namespace DB

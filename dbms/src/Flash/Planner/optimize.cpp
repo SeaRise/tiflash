@@ -13,6 +13,8 @@
 // limitations under the License.
 
 #include <Flash/Planner/optimize.h>
+#include <Flash/Planner/PhysicalPlanVisitor.h>
+#include <Flash/Planner/plans/PhysicalTableScan.h>
 #include <Interpreters/Context.h>
 
 namespace DB
@@ -20,7 +22,7 @@ namespace DB
 class Rule
 {
 public:
-    virtual PhysicalPlanNodePtr apply(const Context & context, PhysicalPlanNodePtr plan, const LoggerPtr & log) = 0;
+    virtual PhysicalPlanNodePtr apply(Context & context, PhysicalPlanNodePtr plan, const LoggerPtr & log) = 0;
 
     virtual ~Rule() = default;
 };
@@ -29,7 +31,7 @@ using RulePtr = std::shared_ptr<Rule>;
 class FinalizeRule : public Rule
 {
 public:
-    PhysicalPlanNodePtr apply(const Context &, PhysicalPlanNodePtr plan, const LoggerPtr &) override
+    PhysicalPlanNodePtr apply(Context &, PhysicalPlanNodePtr plan, const LoggerPtr &) override
     {
         plan->finalize();
         return plan;
@@ -38,10 +40,31 @@ public:
     static RulePtr create() { return std::make_shared<FinalizeRule>(); }
 };
 
-PhysicalPlanNodePtr optimize(const Context & context, PhysicalPlanNodePtr plan, const LoggerPtr & log)
+// for hack.
+class TableScanPreTransformRule : public Rule
+{
+public:
+    PhysicalPlanNodePtr apply(Context & context, PhysicalPlanNodePtr plan, const LoggerPtr &) override
+    {
+        PhysicalPlanVisitor::visit(plan, [&](const PhysicalPlanNodePtr & physical_plan) {
+            assert(physical_plan);
+            if (physical_plan->tp() == PlanType::TableScan)
+            {
+                auto physical_table_scan = std::static_pointer_cast<PhysicalTableScan>(physical_plan);
+                physical_table_scan->preTransform(context);
+            }
+            return true;
+        });
+        return plan;
+    }
+
+    static RulePtr create() { return std::make_shared<TableScanPreTransformRule>(); }
+};
+
+PhysicalPlanNodePtr optimize(Context & context, PhysicalPlanNodePtr plan, const LoggerPtr & log)
 {
     assert(plan);
-    static std::vector<RulePtr> rules{FinalizeRule::create()};
+    static std::vector<RulePtr> rules{FinalizeRule::create(), TableScanPreTransformRule::create()};
     for (const auto & rule : rules)
     {
         plan = rule->apply(context, plan, log);

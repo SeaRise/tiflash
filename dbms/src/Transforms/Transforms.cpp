@@ -66,7 +66,6 @@ void Transforms::finish()
 
 void Transforms::cancel(bool kill)
 {
-    is_cancelled = true;
     assert(source);
     source->cancel(kill);
 }

@@ -30,9 +30,9 @@ String PipelineTask::toString() const
 bool PipelineTask::tryToCpuMode()
 {
     assert(status == PipelineTaskStatus::io_wait || status == PipelineTaskStatus::io_finishing);
-    if (unlikely(transforms->isCancelled()))
+    if (unlikely(signal->isCancelled()))
     {
-        cancel();
+        cancel(signal->isKilled());
         return true;
     }
     try
@@ -85,9 +85,9 @@ void PipelineTask::execute()
         int64_t time_spent = 0;
         while (true)
         {
-            if (unlikely(transforms->isCancelled()))
+            if (unlikely(signal->isCancelled()))
             {
-                cancel();
+                cancel(signal->isKilled());
                 return;
             }
             Stopwatch stopwatch {CLOCK_MONOTONIC_COARSE};
@@ -132,9 +132,10 @@ void PipelineTask::error(const String & err_msg)
     signal->error(err_msg);
 }
 
-void PipelineTask::cancel()
+void PipelineTask::cancel(bool is_kill)
 {
     changeStatus(PipelineTaskStatus::cancelled);
+    transforms->cancel(is_kill);
 }
 
 void PipelineTask::changeStatus(PipelineTaskStatus new_status)

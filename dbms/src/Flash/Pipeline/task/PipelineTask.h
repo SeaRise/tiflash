@@ -71,7 +71,7 @@ public:
 private:
     void finish();
     void error(const String & err_msg);
-    void cancel();
+    void cancel(bool is_kill);
 
     void changeStatus(PipelineTaskStatus new_status);
 

@@ -18,6 +18,7 @@
 #include <Flash/Pipeline/task/PipelineTask.h>
 #include <Flash/Planner/PhysicalPlanNode.h>
 #include <Transforms/Transforms.h>
+#include <Flash/Pipeline/dag/PipelineSignal.h>
 
 #include <unordered_set>
 
@@ -43,9 +44,12 @@ public:
     const std::unordered_set<UInt32> & getParentIds() const { return parent_ids; }
 
     void cancel(bool is_kill);
-    void finish();
 
-    PhysicalPlanNodePtr getPlanNode() const { return plan_node; }
+    PhysicalPlanNodePtr getPlanNode() const 
+    {
+        assert(plan_node);
+        return plan_node; 
+    }
 
     String toString() const;
 
@@ -58,9 +62,7 @@ private:
 
     std::unordered_set<UInt32> parent_ids;
 
-    PipelineEventQueuePtr event_queue;
-
-    std::vector<TransformsPtr> task_transforms_vec;
+    PipelineSignalPtr signal;
 
     LoggerPtr log;
 };

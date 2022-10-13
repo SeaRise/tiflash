@@ -59,16 +59,12 @@ public:
 
     bool isIOReady();
 
-    bool isCancelled() const { return is_cancelled; }
-
 private:
     TableLockHolders table_locks;
 
     SourcePtr source;
     std::vector<TransformPtr> transforms;
     SinkPtr sink;
-
-    std::atomic<bool> is_cancelled{false};
 };
 using TransformsPtr = std::shared_ptr<Transforms>;
 } // namespace DB

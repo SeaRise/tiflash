@@ -15,8 +15,10 @@
 #pragma once
 
 #include <common/types.h>
+#include <Transforms/Transforms.h>
 
 #include <atomic>
+#include <vector>
 
 namespace DB
 {
@@ -28,21 +30,29 @@ class PipelineSignal
 public:
     PipelineSignal(
         UInt32 pipeline_id_, 
-        UInt16 active_task_num_,
         const PipelineEventQueuePtr & event_queue_)
         : pipeline_id(pipeline_id_)
-        , active_task_num(active_task_num_)
         , event_queue(event_queue_)
     {}
+
+    void init(UInt16 active_task_num_);
 
     void finish();
 
     void error(const String & err_msg);
 
+    void cancel(bool is_kill);
+
+    bool isCancelled();
+    bool isKilled();
+
 private:
     UInt32 pipeline_id;
-    std::atomic_uint16_t active_task_num;
     PipelineEventQueuePtr event_queue;
+
+    std::atomic_uint16_t active_task_num;
+    std::atomic<bool> is_cancelled{false};
+    std::atomic<bool> is_killed{false};
 };
 
 using PipelineSignalPtr = std::shared_ptr<PipelineSignal>;

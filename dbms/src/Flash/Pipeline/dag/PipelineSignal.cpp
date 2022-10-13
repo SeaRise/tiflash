@@ -17,15 +17,40 @@
 
 namespace DB
 {
+// call in dag scheduler
+void PipelineSignal::init(UInt16 active_task_num_)
+{
+    active_task_num.store(active_task_num_);
+}
+
+// call in dag scheduler
+void PipelineSignal::cancel(bool is_kill)
+{
+    is_killed.store(is_kill);
+    is_cancelled.store(true);
+}
+
+bool PipelineSignal::isCancelled()
+{
+    return is_cancelled.load();
+}
+
+bool PipelineSignal::isKilled()
+{
+    return is_killed.load();
+}
+
+// call in task scheduler
 void PipelineSignal::finish()
 {
     if (1 == active_task_num.fetch_sub(1))
         event_queue->submit(PipelineEvent::finish(pipeline_id));
 }
 
+// call in task scheduler
 void PipelineSignal::error(const String & err_msg)
 {
     event_queue->submitFirst(PipelineEvent::fail(err_msg));
+    is_cancelled.store(true);
 }
-
 } // namespace DB

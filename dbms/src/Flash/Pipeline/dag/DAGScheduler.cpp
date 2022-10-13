@@ -130,7 +130,6 @@ void DAGScheduler::handlePipelineFinish(const PipelineEvent & event)
     auto pipeline = status_machine.getPipeline(event.pipeline_id);
     LOG_DEBUG(log, "pipeline {} finished", pipeline->toString());
     status_machine.stateToComplete(event.pipeline_id);
-    pipeline->finish();
     if (event.pipeline_id == final_pipeline_id)
     {
         event_queue->finish();

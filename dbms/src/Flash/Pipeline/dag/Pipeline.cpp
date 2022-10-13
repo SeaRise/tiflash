@@ -38,7 +38,7 @@ Pipeline::Pipeline(
     , mpp_task_id(mpp_task_id_)
     , id(id_)
     , parent_ids(parent_ids_)
-    , event_queue(event_queue_)
+    , signal(std::make_shared<PipelineSignal>(id_, event_queue_))
     , log(Logger::get("Pipeline", req_id, fmt::format("<pipeline_id:{}>", id)))
 {
     assert(plan_node);
@@ -55,26 +55,14 @@ std::vector<PipelineTaskPtr> Pipeline::transform(Context & context, size_t concu
     std::vector<PipelineTaskPtr> tasks;
     tasks.reserve(pipeline.concurrency());
     UInt16 active_task_num = pipeline.concurrency();
-    auto signal = std::make_shared<PipelineSignal>(id, active_task_num, event_queue);
+    signal->init(active_task_num);
     for (const auto & transforms : pipeline.transforms_vec)
         tasks.emplace_back(std::make_unique<PipelineTask>(--active_task_num, id, mpp_task_id, transforms, signal));
-    task_transforms_vec = pipeline.transforms_vec;
-    event_queue = nullptr;
     return tasks;
 }
 
 void Pipeline::cancel(bool is_kill)
 {
-    for (const auto & transforms : task_transforms_vec)
-    {
-        if (transforms)
-            transforms->cancel(is_kill);
-    }
-    task_transforms_vec.clear();
-}
-
-void Pipeline::finish()
-{
-    task_transforms_vec = {};
+    signal->cancel(is_kill);
 }
 } // namespace DB

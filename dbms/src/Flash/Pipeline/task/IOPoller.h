@@ -34,7 +34,7 @@ public:
     ~IOPoller();
 private:
     void ioModeLoop();
-    bool handleIOModeTask(PipelineTaskPtr && task);
+    bool handleIOModeTask(std::vector<PipelineTaskPtr> & ready_tasks, PipelineTaskPtr && task);
 private:
     mutable std::mutex mutex;
     std::condition_variable cond;

@@ -62,13 +62,13 @@ IOPoller::~IOPoller()
 }
 
 // return true to remove task in blocked_tasks.
-bool IOPoller::handleIOModeTask(PipelineTaskPtr && task)
+bool IOPoller::handleIOModeTask(std::vector<PipelineTaskPtr> & ready_tasks, PipelineTaskPtr && task)
 {
     assert(task);
     if (task->tryToCpuMode())
     {
         if (task->status == PipelineTaskStatus::cpu_run)
-            pool.submitCPU(std::move(task));
+            ready_tasks.emplace_back(std::move(task));
         return true;
     }
     return false;
@@ -80,7 +80,7 @@ void IOPoller::ioModeLoop()
     LOG_INFO(logger, "start io event loop");
     std::list<PipelineTaskPtr> local_blocked_tasks;
     int spin_count = 0;
-    size_t ready_tasks = 0;
+    std::vector<PipelineTaskPtr> ready_tasks;
     while (!is_shutdown.load(std::memory_order_acquire))
     {
         if (local_blocked_tasks.empty())
@@ -103,23 +103,21 @@ void IOPoller::ioModeLoop()
         auto task_it = local_blocked_tasks.begin();
         while (task_it != local_blocked_tasks.end())
         {
-            if (handleIOModeTask(std::move(*task_it)))
-            {
-                ++ready_tasks;
+            if (handleIOModeTask(ready_tasks, std::move(*task_it)))
                 task_it = local_blocked_tasks.erase(task_it);
-            }
             else
                 ++task_it;
         }
 
-        if (0 == ready_tasks)
+        if (ready_tasks.empty())
         {
             spin_count += 1;
         }
         else
         {
             spin_count = 0;
-            ready_tasks = 0;
+            pool.submitCPU(ready_tasks);
+            assert(ready_tasks.empty());
         }
 
         if (spin_count != 0 && spin_count % 64 == 0)

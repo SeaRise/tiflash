@@ -19,7 +19,12 @@
 
 namespace DB
 {
-TaskScheduler::TaskScheduler(const ServerInfo & server_info): event_loop_pool(server_info.cpu_info.physical_cores) {}
+TaskScheduler::TaskScheduler(
+    const ServerInfo & server_info)
+    // Assume that the lock on the cpu event loop blocks for no more than 50%, 
+    // so a thread count of 2 * cpu_info.physical_cores can theoretically make full use of the cpu.
+    : event_loop_pool(2 * server_info.cpu_info.physical_cores)
+{}
 
 TaskScheduler::~TaskScheduler()
 {

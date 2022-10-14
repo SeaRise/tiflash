@@ -54,7 +54,7 @@ const Block & PhysicalPartialTopN::getSampleBlock() const
 void PhysicalPartialTopN::transform(TransformsPipeline & pipeline, Context & context, size_t concurrency)
 {
     child->transform(pipeline, context, concurrency);
-
+    topn_breaker->initForWrite(pipeline.concurrency());
     pipeline.transform([&](auto & transforms) {
         transforms->append(std::make_shared<ExpressionTransform>(before_sort_actions));
         transforms->setSink(std::make_shared<TopNSink>(order_descr, limit, topn_breaker));

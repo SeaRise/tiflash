@@ -91,7 +91,7 @@ void PipelineTask::execute()
                 return;
             }
             Stopwatch stopwatch {CLOCK_MONOTONIC_COARSE};
-            if (!transforms->execute())
+            if (unlikely(!transforms->execute()))
             {
                 transforms->finish();
                 if (transforms->isIOReady())

@@ -40,6 +40,8 @@ public:
         , header(materializeBlock(sample_block))
     {}
 
+    void initForWrite(size_t concurrency);
+
     void add(Blocks && local_blocks);
 
     Block read();
@@ -56,6 +58,7 @@ private:
     Block header;
 
     std::mutex mu;
+    std::vector<Blocks> pre_store_blocks_vec;
     Blocks blocks;
     std::unique_ptr<IBlockInputStream> impl;
 };

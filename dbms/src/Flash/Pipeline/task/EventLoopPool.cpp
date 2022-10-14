@@ -104,12 +104,11 @@ bool EventLoopPool::popTask(PipelineTaskPtr & task)
 
 void EventLoopPool::submit(std::vector<PipelineTaskPtr> & tasks)
 {
-    if (tasks.empty())
+    if (unlikely(tasks.empty()))
         return;
     std::vector<PipelineTaskPtr> cpu_tasks;
     cpu_tasks.reserve(tasks.size());
-    std::vector<PipelineTaskPtr> io_tasks;
-    io_tasks.reserve(tasks.size());
+    std::list<PipelineTaskPtr> io_tasks;
     while (!tasks.empty())
     {
         auto & task = tasks.back();

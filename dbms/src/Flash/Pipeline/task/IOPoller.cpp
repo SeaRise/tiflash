@@ -44,20 +44,13 @@ void IOPoller::submit(PipelineTaskPtr && task)
     cond.notify_one();
 }
 
-void IOPoller::submit(std::vector<PipelineTaskPtr> & tasks)
+void IOPoller::submit(std::list<PipelineTaskPtr> & tasks)
 {
     if (tasks.empty())
         return;
     {
         std::lock_guard<std::mutex> lock(mutex);
-        while (!tasks.empty())
-        {
-            auto & task = tasks.back();
-            assert(task);
-            LOG_DEBUG(logger, "submit {} to io event loop", task->toString());
-            blocked_tasks.emplace_back(std::move(task));
-            tasks.pop_back();
-        }
+        blocked_tasks.splice(blocked_tasks.end(), tasks);
     }
     cond.notify_one();
 }
@@ -69,13 +62,13 @@ IOPoller::~IOPoller()
 }
 
 // return true to remove task in blocked_tasks.
-bool IOPoller::handleIOModeTask(std::vector<PipelineTaskPtr> & ready_tasks, PipelineTaskPtr && task)
+bool IOPoller::handleIOModeTask(PipelineTaskPtr && task)
 {
     assert(task);
     if (task->tryToCpuMode())
     {
         if (task->status == PipelineTaskStatus::cpu_run)
-            ready_tasks.emplace_back(std::move(task));
+            pool.submitCPU(std::move(task));
         return true;
     }
     return false;
@@ -87,7 +80,7 @@ void IOPoller::ioModeLoop()
     LOG_INFO(logger, "start io event loop");
     std::list<PipelineTaskPtr> local_blocked_tasks;
     int spin_count = 0;
-    std::vector<PipelineTaskPtr> ready_tasks;
+    size_t ready_tasks = 0;
     while (!is_shutdown.load(std::memory_order_acquire))
     {
         if (local_blocked_tasks.empty())
@@ -110,22 +103,23 @@ void IOPoller::ioModeLoop()
         auto task_it = local_blocked_tasks.begin();
         while (task_it != local_blocked_tasks.end())
         {
-            auto & task = *task_it;
-            if (handleIOModeTask(ready_tasks, std::move(task)))
+            if (handleIOModeTask(std::move(*task_it)))
+            {
+                ++ready_tasks;
                 task_it = local_blocked_tasks.erase(task_it);
+            }
             else
                 ++task_it;
         }
 
-        if (ready_tasks.empty())
+        if (0 == ready_tasks)
         {
             spin_count += 1;
         }
         else
         {
             spin_count = 0;
-            pool.submitCPU(ready_tasks);
-            ready_tasks.clear();
+            ready_tasks = 0;
         }
 
         if (spin_count != 0 && spin_count % 64 == 0)

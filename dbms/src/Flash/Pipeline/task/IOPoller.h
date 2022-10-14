@@ -30,11 +30,11 @@ public:
     explicit IOPoller(EventLoopPool & pool_);
     void finish();
     void submit(PipelineTaskPtr && task);
-    void submit(std::vector<PipelineTaskPtr> & tasks);
+    void submit(std::list<PipelineTaskPtr> & tasks);
     ~IOPoller();
 private:
     void ioModeLoop();
-    bool handleIOModeTask(std::vector<PipelineTaskPtr> & ready_tasks, PipelineTaskPtr && task);
+    bool handleIOModeTask(PipelineTaskPtr && task);
 private:
     mutable std::mutex mutex;
     std::condition_variable cond;

@@ -18,6 +18,8 @@
 #include <Flash/Pipeline/task/EventLoopPool.h>
 #include <Server/ServerInfo.h>
 
+#include <memory>
+
 namespace DB
 {
 class Pipeline;
@@ -28,7 +30,9 @@ class Context;
 class TaskScheduler
 {
 public:
-    explicit TaskScheduler(const ServerInfo & server_info);
+    explicit TaskScheduler(
+        const ServerInfo & server_info,
+        double event_loop_num_ratio);
 
     ~TaskScheduler();
 
@@ -41,4 +45,6 @@ private:
 
     LoggerPtr log = Logger::get("TaskScheduler");
 };
+
+using TaskSchedulerPtr = std::unique_ptr<TaskScheduler>;
 } // namespace DB

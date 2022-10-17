@@ -121,13 +121,23 @@ void DAGScheduler::handlePipelineFinish(const PipelineEvent & event [[maybe_unus
     pipeline_signals.clear();
 }
 
-PipelinePtr DAGScheduler::genPipeline(const PhysicalPlanNodePtr & plan_node, PipelineIDGenerator & id_generator)
+PipelinePtr DAGScheduler::genPipeline(PhysicalPlanNodePtr plan_node, PipelineIDGenerator & id_generator)
 {
-    auto id = id_generator.nextID();
-    auto pipeline = std::make_shared<Pipeline>(plan_node, mpp_task_id, id, log->identifier());
+    std::vector<PipelinePtr> parent_pipelines;
+    if (plan_node->tp() == PlanType::PipelineBreaker)
+    {
+        auto physical_breaker = std::static_pointer_cast<PhysicalPipelineBreaker>(plan_node);
+        parent_pipelines.emplace_back(genPipeline(physical_breaker->before(), id_generator));
+        plan_node = physical_breaker->after();
+    }
+
+    auto pipeline = std::make_shared<Pipeline>(plan_node, mpp_task_id, id_generator.nextID(), log->identifier());
     addPipeline(pipeline);
     auto trigger = std::make_shared<PipelineTrigger>(pipeline, task_scheduler, context);
-    const auto & parent_pipelines = createParentPipelines(plan_node, id_generator);
+
+    const auto & tmp_parent_pipelines = createParentPipelines(plan_node, id_generator);
+    parent_pipelines.insert(parent_pipelines.end(), tmp_parent_pipelines.cbegin(), tmp_parent_pipelines.cend());
+
     for (const auto & parent_pipeline : parent_pipelines)
         parent_pipeline->addNextPipelineTrigger(trigger);
     if (parent_pipelines.empty())
@@ -214,7 +224,7 @@ std::vector<PipelinePtr> DAGScheduler::createParentPipelines(const PhysicalPlanN
             auto physical_breaker = std::static_pointer_cast<PhysicalPipelineBreaker>(child);
             parent_pipelines.emplace_back(genPipeline(physical_breaker->before(), id_generator));
 
-            // remove PhysicalAggregation
+            // remove PhysicalPipelineBreaker
             plan_node->setChild(0, physical_breaker->after());
             const auto & pipelines = createParentPipelines(physical_breaker->after(), id_generator);
             parent_pipelines.insert(parent_pipelines.end(), pipelines.cbegin(), pipelines.cend());

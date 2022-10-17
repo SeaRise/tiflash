@@ -59,7 +59,7 @@ public:
     const MPPTaskId & getMPPTaskId() const { return mpp_task_id; }
 
 private:
-    PipelinePtr genPipeline(const PhysicalPlanNodePtr & plan_node, PipelineIDGenerator & id_generator);
+    PipelinePtr genPipeline(PhysicalPlanNodePtr plan_node, PipelineIDGenerator & id_generator);
 
     std::vector<PipelinePtr> createParentPipelines(const PhysicalPlanNodePtr & plan_node, PipelineIDGenerator & id_generator);
 

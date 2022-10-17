@@ -216,11 +216,8 @@ std::vector<PipelinePtr> DAGScheduler::createParentPipelines(const PhysicalPlanN
     for (size_t i = 0; i < plan_node->childrenSize(); ++i)
     {
         const auto & child = plan_node->children(i);
-        switch (child->tp())
+        if (child->tp() == PlanType::PipelineBreaker)
         {
-        case PlanType::PipelineBreaker:
-        {
-            // PhysicalPipelineBreaker cannot be the root node.
             auto physical_breaker = std::static_pointer_cast<PhysicalPipelineBreaker>(child);
             parent_pipelines.emplace_back(genPipeline(physical_breaker->before(), id_generator));
 
@@ -228,14 +225,11 @@ std::vector<PipelinePtr> DAGScheduler::createParentPipelines(const PhysicalPlanN
             plan_node->setChild(0, physical_breaker->after());
             const auto & pipelines = createParentPipelines(physical_breaker->after(), id_generator);
             parent_pipelines.insert(parent_pipelines.end(), pipelines.cbegin(), pipelines.cend());
-            break;
         }
-        default:
+        else
         {
             const auto & pipelines = createParentPipelines(child, id_generator);
             parent_pipelines.insert(parent_pipelines.end(), pipelines.cbegin(), pipelines.cend());
-            break;
-        }
         }
     }
     return parent_pipelines;

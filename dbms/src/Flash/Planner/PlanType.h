@@ -47,6 +47,8 @@ struct PlanType
         FinalTopN = 22,
         PartialLimit = 23,
         FinalLimit = 24,
+        JoinPreBuild = 25,
+        JoinFinalBuild = 26,
     };
     PlanTypeEnum enum_value;
 

@@ -738,7 +738,6 @@ void insertFromBlockImpl(
         throw Exception("Unknown JOIN keys variant.", ErrorCodes::UNKNOWN_SET_DATA_VARIANT);
     }
 }
-} // namespace
 
 void recordFilteredRows(const Block & block, const String & filter_column, ColumnPtr & null_map_holder, ConstNullMapPtr & null_map)
 {
@@ -781,6 +780,57 @@ void recordFilteredRows(const Block & block, const String & filter_column, Colum
     null_map_holder = std::move(mutable_null_map_holder);
 
     null_map = &static_cast<const ColumnUInt8 &>(*null_map_holder).getData();
+}
+
+template <typename Maps>
+void reserveImpl(Maps & maps, Join::Type type, size_t rows)
+{
+    switch (type)
+    {
+    case Join::Type::EMPTY:
+        break;
+    case Join::Type::CROSS:
+        break;
+
+#define M(TYPE)                                                            \
+    case Join::Type::TYPE:                                                 \
+    {                                                                      \
+        auto segments = maps.TYPE->getSegmentSize();                       \
+        auto estimateRowsPerSegment = rows * 1.5 / segments;               \
+        for (size_t i = 0; i < segments; ++i)                              \
+            maps.TYPE->getSegmentTable(i).reserve(estimateRowsPerSegment); \
+        break;                                                             \
+    }
+        APPLY_FOR_JOIN_VARIANTS(M)
+#undef M
+
+    default:
+        throw Exception("Unknown JOIN keys variant.", ErrorCodes::UNKNOWN_SET_DATA_VARIANT);
+    }
+}
+} // namespace
+
+void Join::reserve(size_t rows)
+{
+    std::unique_lock lock(build_table_mutex);
+    if (isCrossJoin(kind))
+    {
+        // do nothing
+    }
+    else if (!getFullness(kind))
+    {
+        if (strictness == ASTTableJoin::Strictness::Any)
+            reserveImpl(maps_any, type, rows);
+        else
+            reserveImpl(maps_all, type, rows);
+    }
+    else
+    {
+        if (strictness == ASTTableJoin::Strictness::Any)
+            reserveImpl(maps_any_full, type, rows);
+        else
+            reserveImpl(maps_all_full, type, rows);
+    }
 }
 
 bool Join::insertFromBlock(const Block & block)

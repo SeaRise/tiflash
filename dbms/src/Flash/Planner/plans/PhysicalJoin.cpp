@@ -209,7 +209,9 @@ PhysicalPlanNodePtr PhysicalJoin::build(
             executor_id,
             join_output_schema,
             log->identifier(),
-            physical_join_build,
+            context.getSettingsRef().two_stage_join_build
+                ? physical_join_build->splitPreAndFinal()
+                : physical_join_build,
             physical_join_probe);
         physical_breaker->notTiDBOperator();
         return physical_breaker;

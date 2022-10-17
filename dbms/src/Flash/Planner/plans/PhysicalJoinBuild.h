@@ -49,6 +49,8 @@ public:
 
     void transform(TransformsPipeline & pipeline, Context & context, size_t concurrency) override;
 
+    PhysicalPlanNodePtr splitPreAndFinal();
+
 private:
     void transformImpl(DAGPipeline &, Context &, size_t) override;
 

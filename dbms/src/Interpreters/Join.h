@@ -117,6 +117,8 @@ public:
 
     void insertFromBlock(const Block & block, size_t stream_index);
 
+    void reserve(size_t rows);
+
     /** Join data from the map (that was previously built by calls to insertFromBlock) to the block with data from "left" table.
       * Could be called from different threads in parallel.
       */

@@ -154,8 +154,8 @@ bool MPPTunnel::asyncWrite(const mpp::MPPDataPacket & data)
     }
     case MPMCQueueResult::FULL:
         return false;
-    case MPMCQueueResult::FINISHED: // consumer has finished, for limit/topn
-        return true;
+    case MPMCQueueResult::FINISHED: // consumer has finished, for limit/topn, wait kill from tidb.
+        return false;
     default:
         throw Exception(fmt::format("write to tunnel which is already closed,{}", tunnel_sender->isConsumerFinished() ? tunnel_sender->getConsumerFinishMsg() : ""));
     }

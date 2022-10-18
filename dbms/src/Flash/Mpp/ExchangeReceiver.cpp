@@ -143,6 +143,36 @@ bool pushPacket(size_t source_index,
     return push_succeed;
 }
 
+std::shared_ptr<ReceivedMessage> toReceivedMessage(const TrackedMppDataPacketPtr & tracked_packet)
+{
+    const mpp::Error * error_ptr = nullptr;
+    auto & packet = tracked_packet->packet;
+    if (packet.has_error())
+        error_ptr = &packet.error();
+    const String * resp_ptr = nullptr;
+    if (!packet.data().empty())
+        resp_ptr = &packet.data();
+
+    std::vector<const String *> chunks(packet.chunks_size());
+    for (int i = 0; i < packet.chunks_size(); ++i)
+    {
+        chunks[i] = &packet.chunks(i);
+    }
+
+    if (!(resp_ptr == nullptr && error_ptr == nullptr && chunks.empty()))
+    {
+        auto recv_msg = std::make_shared<ReceivedMessage>(
+            0,
+            "",
+            tracked_packet,
+            error_ptr,
+            resp_ptr,
+            std::move(chunks));
+        return recv_msg;
+    }
+    return nullptr;
+}
+
 enum class AsyncRequestStage
 {
     NEED_INIT,
@@ -413,7 +443,8 @@ ExchangeReceiverBase<RPCContext>::ExchangeReceiverBase(
     size_t max_streams_,
     const String & req_id,
     const String & executor_id,
-    uint64_t fine_grained_shuffle_stream_count_)
+    uint64_t fine_grained_shuffle_stream_count_,
+    bool enable_pipeline_)
     : rpc_context(std::move(rpc_context_))
     , source_num(source_num_)
     , max_streams(max_streams_)
@@ -424,6 +455,7 @@ ExchangeReceiverBase<RPCContext>::ExchangeReceiverBase(
     , exc_log(Logger::get("ExchangeReceiver", req_id, executor_id))
     , collected(false)
     , fine_grained_shuffle_stream_count(fine_grained_shuffle_stream_count_)
+    , enable_pipeline(enable_pipeline_)
 {
     try
     {
@@ -474,6 +506,8 @@ template <typename RPCContext>
 void ExchangeReceiverBase<RPCContext>::cancel()
 {
     setEndState(ExchangeReceiverState::CANCELED);
+    if (local_exchange_reader)
+        local_exchange_reader->cancel("local reader cancelled");
     cancelAllMsgChannels();
 }
 
@@ -481,6 +515,8 @@ template <typename RPCContext>
 void ExchangeReceiverBase<RPCContext>::close()
 {
     setEndState(ExchangeReceiverState::CLOSED);
+    if (local_exchange_reader)
+        local_exchange_reader->finish();
     finishAllMsgChannels();
 }
 
@@ -495,6 +531,11 @@ void ExchangeReceiverBase<RPCContext>::setUpConnection()
         auto req = rpc_context->makeRequest(index);
         if (rpc_context->supportAsync(req))
             async_requests.push_back(std::move(req));
+        else if (req.is_local && enable_pipeline)
+        {
+            is_local_finished = false;
+            local_exchange_reader = std::static_pointer_cast<LocalExchangePacketReader>(rpc_context->makeReader(req));
+        }
         else
         {
             thread_manager->schedule(true, "Receiver", [this, req = std::move(req)] {
@@ -581,6 +622,56 @@ void ExchangeReceiverBase<RPCContext>::reactor(const std::vector<Request> & asyn
             }
             waiting_for_retry_requests.swap(tmp);
         }
+    }
+}
+
+template <typename RPCContext>
+void ExchangeReceiverBase<RPCContext>::localReadFinish(bool meet_error, const String & local_err_msg)
+{
+    bool false_bool = false;
+    if (is_local_finished.compare_exchange_strong(false_bool, true))
+    {
+        if (meet_error)
+            local_exchange_reader->cancel(local_err_msg);
+        else
+        {
+            auto status = local_exchange_reader->finish();
+            RUNTIME_ASSERT(status.ok());
+        }
+        connectionDone(meet_error, local_err_msg, exc_log);
+    }
+}
+
+template <typename RPCContext>
+bool ExchangeReceiverBase<RPCContext>::tryReadForLocal(std::shared_ptr<ReceivedMessage> & recv_msg)
+{
+    if (is_local_finished)
+        return false;
+
+    try
+    {
+        TrackedMppDataPacketPtr packet = std::make_shared<TrackedMppDataPacket>();
+        if (!local_exchange_reader->tryRead(packet))
+        {
+            localReadFinish(false, "");
+            return false;
+        }
+        // try fail, but it is not error and finished.
+        if (!packet)
+            return false;
+        if (packet->hasError())
+        {
+            localReadFinish(true, fmt::format("Read error message from mpp packet: {}", packet->error()));
+            return false;
+        }
+
+        recv_msg = toReceivedMessage(packet);
+        return true;
+    }
+    catch (...)
+    {
+        localReadFinish(true, getCurrentExceptionMessage(false));
+        return true;
     }
 }
 
@@ -709,6 +800,10 @@ bool ExchangeReceiverBase<RPCContext>::asyncReceive(std::shared_ptr<ReceivedMess
 {
     assert(!recv_msg);
     assert(1 == msg_channels.size());
+
+    if (tryReadForLocal(recv_msg))
+        return true;
+
     auto try_pop_result = msg_channels[0]->tryPop(recv_msg);
     switch (try_pop_result)
     {

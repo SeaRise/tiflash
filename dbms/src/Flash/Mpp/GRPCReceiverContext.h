@@ -51,6 +51,28 @@ public:
 };
 using AsyncExchangePacketReaderPtr = std::shared_ptr<AsyncExchangePacketReader>;
 
+struct LocalExchangePacketReader : public ExchangePacketReader
+{
+    LocalTunnelSenderPtr local_tunnel_sender;
+    std::atomic_bool is_finished{false};
+
+    explicit LocalExchangePacketReader(const LocalTunnelSenderPtr & local_tunnel_sender_)
+        : local_tunnel_sender(local_tunnel_sender_)
+    {}
+
+    /// put the implementation of dtor in .cpp so we don't need to put the specialization of
+    /// pingcap::kv::RpcCall<mpp::EstablishMPPConnectionRequest> in header file.
+    ~LocalExchangePacketReader() override;
+
+    bool read(TrackedMppDataPacketPtr & packet) override;
+    bool tryRead(TrackedMppDataPacketPtr & packet);
+
+    void cancel(const String & reason) override;
+
+    ::grpc::Status finish() override;
+};
+using LocalExchangePacketReaderPtr = std::shared_ptr<LocalExchangePacketReader>;
+
 struct ExchangeRecvRequest
 {
     Int64 source_index = -1;

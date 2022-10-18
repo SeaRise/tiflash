@@ -57,11 +57,6 @@ void EventLoop::handleCpuModeTask(PipelineTaskPtr && task)
 
 void EventLoop::cpuModeLoop()
 {
-#ifdef __linux__
-    struct sched_param param;
-    param.__sched_priority = sched_get_priority_max(sched_getscheduler(0));
-    sched_setparam(0, &param);
-#endif
     setThreadName("EventLoop");
     LOG_INFO(logger, "start cpu event loop {}", loop_id);
     PipelineTaskPtr task;

@@ -154,6 +154,8 @@ bool MPPTunnel::asyncWrite(const mpp::MPPDataPacket & data)
     }
     case MPMCQueueResult::FULL:
         return false;
+    case MPMCQueueResult::FINISHED: // consumer has finished, for limit/topn
+        return true;
     default:
         throw Exception(fmt::format("write to tunnel which is already closed,{}", tunnel_sender->isConsumerFinished() ? tunnel_sender->getConsumerFinishMsg() : ""));
     }
@@ -336,7 +338,10 @@ StringRef MPPTunnel::statusToString()
 void TunnelSender::consumerFinish(const String & msg)
 {
     LOG_TRACE(log, "calling consumer Finish");
-    finish();
+    if (msg.empty())
+        finish();
+    else
+        cancelWith(msg);
     consumer_state.setMsg(msg);
 }
 
@@ -416,5 +421,37 @@ std::shared_ptr<DB::TrackedMppDataPacket> LocalTunnelSender::readForLocal()
     }
     consumerFinish("");
     return nullptr;
+}
+
+bool LocalTunnelSender::tryReadForLocal(TrackedMppDataPacketPtr & res)
+{
+    assert(!res);
+    auto result = send_queue.tryPop(res);
+    switch (result)
+    {
+    case MPMCQueueResult::OK:
+    {
+        // switch tunnel's memory tracker into receiver's
+        res->switchMemTracker(current_memory_tracker);
+        return true;
+    }
+    case MPMCQueueResult::CANCELLED:
+    {
+        RUNTIME_ASSERT(!send_queue.getCancelReason().empty(), "Tunnel sender cancelled without reason");
+        bool old_value = false;
+        if (cancel_reason_sent.compare_exchange_strong(old_value, true))
+            res = std::make_shared<TrackedMppDataPacket>(getPacketWithError(send_queue.getCancelReason()), current_memory_tracker);
+        else
+            consumerFinish("");
+        return true;
+    }
+    case MPMCQueueResult::EMPTY:
+        return false;
+    default:
+    {
+        consumerFinish("");
+        return true;
+    }
+    }
 }
 } // namespace DB

@@ -137,7 +137,8 @@ public:
         size_t max_streams_,
         const String & req_id,
         const String & executor_id,
-        uint64_t fine_grained_shuffle_stream_count);
+        uint64_t fine_grained_shuffle_stream_count,
+        bool enable_pipeline_ = false);
 
     ~ExchangeReceiverBase();
 
@@ -152,6 +153,8 @@ public:
         const Block & header,
         size_t stream_id);
 
+    void localReadFinish(bool meet_error, const String & local_err_msg);
+    bool tryReadForLocal(std::shared_ptr<ReceivedMessage> & recv_msg);
     bool asyncReceive(std::shared_ptr<ReceivedMessage> & recv_msg);
 
     size_t getSourceNum() const { return source_num; }
@@ -230,6 +233,10 @@ private:
     bool collected = false;
     int thread_count = 0;
     uint64_t fine_grained_shuffle_stream_count;
+
+    bool enable_pipeline;
+    std::atomic_bool is_local_finished{true};
+    LocalExchangePacketReaderPtr local_exchange_reader;
 };
 
 class ExchangeReceiver : public ExchangeReceiverBase<GRPCReceiverContext>

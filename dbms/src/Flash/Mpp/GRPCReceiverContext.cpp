@@ -114,55 +114,6 @@ struct AsyncGrpcExchangePacketReader : public AsyncExchangePacketReader
     }
 };
 
-struct LocalExchangePacketReader : public ExchangePacketReader
-{
-    LocalTunnelSenderPtr local_tunnel_sender;
-
-    explicit LocalExchangePacketReader(const LocalTunnelSenderPtr & local_tunnel_sender_)
-        : local_tunnel_sender(local_tunnel_sender_)
-    {}
-
-    /// put the implementation of dtor in .cpp so we don't need to put the specialization of
-    /// pingcap::kv::RpcCall<mpp::EstablishMPPConnectionRequest> in header file.
-    ~LocalExchangePacketReader() override
-    {
-        if (local_tunnel_sender)
-        {
-            // In case that ExchangeReceiver throw error before finish reading from mpp_tunnel
-            local_tunnel_sender->consumerFinish("Receiver exists");
-            local_tunnel_sender.reset();
-        }
-    }
-
-    bool read(TrackedMppDataPacketPtr & packet) override
-    {
-        TrackedMppDataPacketPtr tmp_packet = local_tunnel_sender->readForLocal();
-        bool success = tmp_packet != nullptr;
-        if (success)
-            packet = tmp_packet;
-        return success;
-    }
-
-    void cancel(const String & reason) override
-    {
-        if (local_tunnel_sender)
-        {
-            local_tunnel_sender->consumerFinish(fmt::format("Receiver cancelled, reason: {}", reason));
-            local_tunnel_sender.reset();
-        }
-    }
-
-    ::grpc::Status finish() override
-    {
-        if (local_tunnel_sender)
-        {
-            local_tunnel_sender->consumerFinish("Receiver finished!");
-            local_tunnel_sender.reset();
-        }
-        return ::grpc::Status::OK;
-    }
-};
-
 std::tuple<MPPTunnelPtr, grpc::Status> establishMPPConnectionLocal(
     const ::mpp::EstablishMPPConnectionRequest * request,
     const std::shared_ptr<MPPTaskManager> & task_manager)
@@ -181,6 +132,63 @@ std::tuple<MPPTunnelPtr, grpc::Status> establishMPPConnectionLocal(
     return std::make_tuple(tunnel, grpc::Status::OK);
 }
 } // namespace
+
+LocalExchangePacketReader::~LocalExchangePacketReader()
+{
+    bool old_value = false;
+    if (is_finished.compare_exchange_strong(old_value, true))
+    {
+        // In case that ExchangeReceiver throw error before finish reading from mpp_tunnel
+        local_tunnel_sender->consumerFinish("Receiver exists");
+        local_tunnel_sender.reset();
+    }
+}
+
+bool LocalExchangePacketReader::read(TrackedMppDataPacketPtr & packet)
+{
+    if (is_finished)
+        return false;
+    TrackedMppDataPacketPtr tmp_packet = local_tunnel_sender->readForLocal();
+    bool success = tmp_packet != nullptr;
+    if (success)
+        packet = tmp_packet;
+    return success;
+}
+
+bool LocalExchangePacketReader::tryRead(TrackedMppDataPacketPtr & packet)
+{
+    if (is_finished)
+        return false;
+
+    if (!local_tunnel_sender->tryReadForLocal(packet))
+    {
+        // try fail, but result is success
+        return true;
+    }
+    return packet != nullptr;
+}
+
+void LocalExchangePacketReader::cancel(const String & reason)
+{
+    bool old_value = false;
+    if (is_finished.compare_exchange_strong(old_value, true))
+    {
+        local_tunnel_sender->consumerFinish(fmt::format("Receiver cancelled, reason: {}", reason));
+        local_tunnel_sender.reset();
+    }
+}
+
+::grpc::Status LocalExchangePacketReader::finish()
+{
+    bool old_value = false;
+    if (is_finished.compare_exchange_strong(old_value, true))
+    {
+        // local_tunnel_sender->consumerFinish("Receiver finished!");
+        local_tunnel_sender->consumerFinish("");
+        local_tunnel_sender.reset();
+    }
+    return ::grpc::Status::OK;
+}
 
 GRPCReceiverContext::GRPCReceiverContext(
     const tipb::ExchangeReceiver & exchange_receiver_meta_,

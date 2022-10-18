@@ -131,6 +131,7 @@ protected:
         {
             bool old_value = false;
             if (!msg_has_set.compare_exchange_strong(old_value, true, std::memory_order_seq_cst, std::memory_order_relaxed))
+            // if (!msg_has_set.compare_exchange_strong(old_value, true))
                 return;
             promise.set_value(msg);
         }
@@ -223,9 +224,10 @@ public:
     using Base = TunnelSender;
     using Base::Base;
     TrackedMppDataPacketPtr readForLocal();
+    bool tryReadForLocal(TrackedMppDataPacketPtr & res);
 
 private:
-    bool cancel_reason_sent = false;
+    std::atomic_bool cancel_reason_sent = false;
 };
 
 using TunnelSenderPtr = std::shared_ptr<TunnelSender>;

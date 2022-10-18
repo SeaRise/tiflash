@@ -650,7 +650,7 @@ bool ExchangeReceiverBase<RPCContext>::tryReadForLocal(std::shared_ptr<ReceivedM
 
     try
     {
-        TrackedMppDataPacketPtr packet = std::make_shared<TrackedMppDataPacket>();
+        TrackedMppDataPacketPtr packet;
         if (!local_exchange_reader->tryRead(packet))
         {
             localReadFinish(false, "");

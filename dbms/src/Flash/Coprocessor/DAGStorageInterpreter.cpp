@@ -960,8 +960,7 @@ std::vector<SourcePtr> DAGStorageInterpreter::buildLocalSources(size_t max_block
     auto & storage = storages_with_structure_lock[table_id].storage;
 
     const DAGContext & dag_context = *context.getDAGContext();
-    // for (int num_allow_retry = 1; num_allow_retry >= 0; --num_allow_retry)
-    for (int num_allow_retry = 500; num_allow_retry >= 0; --num_allow_retry)
+    for (int num_allow_retry = 1; num_allow_retry >= 0; --num_allow_retry)
     {
         try
         {
@@ -982,10 +981,7 @@ std::vector<SourcePtr> DAGStorageInterpreter::buildLocalSources(size_t max_block
             {
                 // clean all streams from local because we are not sure the correctness of those streams
                 if (likely(checkRetriableForBatchCopOrMPP(table_id, query_info, e, num_allow_retry)))
-                {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(15));
                     continue;
-                }
                 else
                     break;
             }

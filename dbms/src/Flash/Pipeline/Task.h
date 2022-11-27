@@ -59,11 +59,9 @@ public:
     {
         if (sink->isBlocked())
             return true;
-        if (blocked_op_index && transforms[*blocked_op_index]->isBlocked())
-            return true;
-        if (source->isBlocked())
-            return true;
-        return false;
+        if (blocked_op_index)
+            return transforms[*blocked_op_index]->isBlocked();
+        return source->isBlocked();
     }
 
 private:

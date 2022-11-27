@@ -76,7 +76,7 @@ private:
     int block_count = 100;
 };
 
-class IOSource : public Source
+class AsyncIOSource : public Source
 {
 public:
     Block read() override
@@ -107,6 +107,29 @@ public:
 
 private:
     std::optional<std::future<void>> io_future;
+    int block_count = 100;
+};
+
+class SyncIOSource : public Source
+{
+public:
+    Block read() override
+    {
+        if (block_count > 0)
+        {
+            --block_count;
+            doIOPart();
+            return prepareRandomBlock(50000); // 5w
+        }
+        return {};
+    }
+
+    bool isBlocked() override
+    {
+        return false;
+    }
+
+private:
     int block_count = 100;
 };
 } // namespace DB

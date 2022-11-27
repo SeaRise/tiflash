@@ -63,7 +63,7 @@ private:
     size_t count = 0;
 };
 
-class IOTransform : public Transform
+class AsyncIOTransform : public Transform
 {
 public:
     PStatus transform(Block & block) override
@@ -109,6 +109,34 @@ public:
 private:
     std::optional<std::future<void>> io_future;
     Block io_block;
+    size_t count = 0;
+};
+
+class SyncIOTransform : public Transform
+{
+public:
+    PStatus transform(Block & block) override
+    {
+        if (!block)
+            return PStatus::NEED_MORE;
+
+        doIOPart();
+        doCpuPart(count, 1010);
+
+        return PStatus::NEED_MORE;
+    }
+
+    Block fetchBlock() override
+    {
+        return {};
+    }
+
+    bool isBlocked() override
+    {
+        return false;
+    }
+
+private:
     size_t count = 0;
 };
 } // namespace DB

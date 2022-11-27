@@ -30,10 +30,13 @@ public:
         source = std::make_unique<CPUSource>();
         return *this;
     }
-    TaskBuilder & setIOSource()
+    TaskBuilder & setIOSource(bool is_async)
     {
         assert(!source);
-        source = std::make_unique<IOSource>();
+        if (is_async)
+            source = std::make_unique<AsyncIOSource>();
+        else
+            source = std::make_unique<SyncIOSource>();
         return *this;
     }
     TaskBuilder & appendCPUTransform()
@@ -41,9 +44,12 @@ public:
         transforms.emplace_back(std::make_unique<CPUTransform>());
         return *this;
     }
-    TaskBuilder & appendIOTransform()
+    TaskBuilder & appendIOTransform(bool is_async)
     {
-        transforms.emplace_back(std::make_unique<IOTransform>());
+        if (is_async)
+            transforms.emplace_back(std::make_unique<AsyncIOTransform>());
+        else
+            transforms.emplace_back(std::make_unique<SyncIOTransform>());
         return *this;
     }
     TaskBuilder & setCPUSink()
@@ -52,10 +58,13 @@ public:
         sink = std::make_unique<CPUSink>();
         return *this;
     }
-    TaskBuilder & setIOSink()
+    TaskBuilder & setIOSink(bool is_async)
     {
         assert(!sink);
-        sink = std::make_unique<IOSink>();
+        if (is_async)
+            sink = std::make_unique<AsyncIOSink>();
+        else
+            sink = std::make_unique<SyncIOSink>();
         return *this;
     }
 

@@ -43,36 +43,40 @@ TEST_F(PipelineRunner, empty)
 
 TEST_F(PipelineRunner, all_cpu)
 {
-    auto build = []() {
-        return TaskBuilder().setCPUSource().appendCPUTransform().setCPUSink().build();
-    };
     std::vector<TaskPtr> tasks;
-    tasks.emplace_back(build());
+    tasks.emplace_back(TaskBuilder().setCPUSource().appendCPUTransform().setCPUSink().build());
     TaskScheduler task_scheduler(std::thread::hardware_concurrency(), tasks);
     task_scheduler.waitForFinish();
 }
 
 TEST_F(PipelineRunner, all_io)
 {
-    auto build = []() {
-        return TaskBuilder().setIOSource().appendIOTransform().setIOSink().build();
+    auto tester = [](bool is_async) {
+        std::vector<TaskPtr> tasks;
+        tasks.emplace_back(TaskBuilder().setIOSource(is_async).appendIOTransform(is_async).setIOSink(is_async).build());
+        TaskScheduler task_scheduler(std::thread::hardware_concurrency(), tasks);
+        task_scheduler.waitForFinish();
     };
-    std::vector<TaskPtr> tasks;
-    tasks.emplace_back(build());
-    TaskScheduler task_scheduler(std::thread::hardware_concurrency(), tasks);
-    task_scheduler.waitForFinish();
+
+    tester(true);
+    tester(false);
 }
 
 TEST_F(PipelineRunner, io_cpu)
 {
-    std::vector<TaskPtr> tasks;
-    tasks.emplace_back(TaskBuilder().setCPUSource().appendCPUTransform().setIOSink().build());
-    tasks.emplace_back(TaskBuilder().setCPUSource().appendIOTransform().setIOSink().build());
-    tasks.emplace_back(TaskBuilder().setCPUSource().appendIOTransform().setCPUSink().build());
-    tasks.emplace_back(TaskBuilder().setIOSource().appendIOTransform().setCPUSink().build());
-    tasks.emplace_back(TaskBuilder().setIOSource().appendCPUTransform().setCPUSink().build());
-    tasks.emplace_back(TaskBuilder().setIOSource().appendCPUTransform().setIOSink().build());
-    TaskScheduler task_scheduler(std::thread::hardware_concurrency(), tasks);
-    task_scheduler.waitForFinish();
+    auto tester = [](bool is_async) {
+        std::vector<TaskPtr> tasks;
+        tasks.emplace_back(TaskBuilder().setCPUSource().appendCPUTransform().setIOSink(is_async).build());
+        tasks.emplace_back(TaskBuilder().setCPUSource().appendIOTransform(is_async).setIOSink(is_async).build());
+        tasks.emplace_back(TaskBuilder().setCPUSource().appendIOTransform(is_async).setCPUSink().build());
+        tasks.emplace_back(TaskBuilder().setIOSource(is_async).appendIOTransform(is_async).setCPUSink().build());
+        tasks.emplace_back(TaskBuilder().setIOSource(is_async).appendCPUTransform().setCPUSink().build());
+        tasks.emplace_back(TaskBuilder().setIOSource(is_async).appendCPUTransform().setIOSink(is_async).build());
+        TaskScheduler task_scheduler(std::thread::hardware_concurrency(), tasks);
+        task_scheduler.waitForFinish();
+    };
+
+    tester(true);
+    tester(false);
 }
 } // namespace DB::tests

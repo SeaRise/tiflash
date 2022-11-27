@@ -57,7 +57,7 @@ private:
     size_t count = 0;
 };
 
-class IOSink : public Sink
+class AsyncIOSink : public Sink
 {
 public:
     PStatus write(Block & block) override
@@ -84,5 +84,23 @@ public:
 
 private:
     std::optional<std::future<void>> io_future;
+};
+
+class SyncIOSink : public Sink
+{
+public:
+    PStatus write(Block & block) override
+    {
+        if (!block)
+            return PStatus::FINISHED;
+        block.clear();
+        doIOPart();
+        return PStatus::NEED_MORE;
+    }
+
+    bool isBlocked() override
+    {
+        return false;
+    }
 };
 } // namespace DB

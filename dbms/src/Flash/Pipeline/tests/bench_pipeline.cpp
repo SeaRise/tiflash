@@ -41,19 +41,51 @@ BENCHMARK_DEFINE_F(PipelineBench, bench)
 try
 {
     const bool is_async = state.range(0);
-    const size_t task_batch_num = state.range(1);
+    const size_t transform_num = state.range(1);
 
     for (auto _ : state)
     {
         std::vector<TaskPtr> tasks;
-        for (size_t i = 0; i < task_batch_num; ++i)
+        std::vector<bool> bool_vec;
+        auto add_task = []() {
+            assert(bool_vec.size() >= 2);
+            size_t index = 0;
+            TaskBuilder task_builder;
+            if (bool_vec[index++])
+                task_builder.setCPUSource();
+            else
+                task_builder.setIOSource(is_async);
+            for (index < bool_vec.size() - 1; ++index)
+            {
+                if (bool_vec[index++])
+                    task_builder.appendCPUTransform();
+                else
+                    task_builder.appendIOTransform(is_async);
+            }
+            if (bool_vec[index])
+                task_builder.setCPUSink();
+            else
+                task_builder.setIOSink(is_async);
+            tasks.emplace_back(task_builder.build());
+        };
+        size_t num = (transform_num + 2);
+        size_t i = 0;
+        auto recursion_func = []() {
+            bool_vec.push_back(true);
+            ++i;
+            recursion_func();
+
+            bool_vec.pop_back();
+            --i;
+
+            bool_vec.push_back(false);
+            ++i;
+            recursion_func();
+        };
+
+        for (size_t i = 0; i < num; ++i)
         {
-            tasks.emplace_back(TaskBuilder().setCPUSource().appendCPUTransform().setIOSink(is_async).build());
-            tasks.emplace_back(TaskBuilder().setCPUSource().appendIOTransform(is_async).setIOSink(is_async).build());
-            tasks.emplace_back(TaskBuilder().setCPUSource().appendIOTransform(is_async).setCPUSink().build());
-            tasks.emplace_back(TaskBuilder().setIOSource(is_async).appendIOTransform(is_async).setCPUSink().build());
-            tasks.emplace_back(TaskBuilder().setIOSource(is_async).appendCPUTransform().setCPUSink().build());
-            tasks.emplace_back(TaskBuilder().setIOSource(is_async).appendCPUTransform().setIOSink(is_async).build());
+            bool_vec.
         }
         TaskScheduler task_scheduler(std::thread::hardware_concurrency(), tasks);
         task_scheduler.waitForFinish();
@@ -62,7 +94,7 @@ try
 CATCH
 BENCHMARK_REGISTER_F(PipelineBench, bench)
     ->Args({true, 1})
-    ->Args({true, 5})
     ->Args({false, 1})
+    ->Args({true, 5})
     ->Args({false, 5});
 } // namespace DB::tests

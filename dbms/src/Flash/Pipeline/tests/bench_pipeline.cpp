@@ -14,11 +14,13 @@
 
 #include <Flash/Pipeline/TaskBuilder.h>
 #include <Flash/Pipeline/TaskScheduler.h>
-#include <gtest/gtest.h>
+#include <TestUtils/FunctionTestUtils.h>
+#include <TestUtils/TiFlashTestEnv.h>
+#include <benchmark/benchmark.h>
 
 namespace DB::tests
 {
-class PipelineRunner : public benchmark::Fixture
+class PipelineBench : public benchmark::Fixture
 {
 public:
     void SetUp(const benchmark::State &) override
@@ -34,49 +36,33 @@ public:
     }
 };
 
-TEST_F(PipelineRunner, empty)
+BENCHMARK_DEFINE_F(PipelineBench, bench)
+(benchmark::State & state)
+try
 {
-    std::vector<TaskPtr> tasks;
-    TaskScheduler task_scheduler(std::thread::hardware_concurrency(), tasks);
-    task_scheduler.waitForFinish();
-}
+    const bool is_async = state.range(0);
+    const size_t task_batch_num = state.range(1);
 
-TEST_F(PipelineRunner, all_cpu)
-{
-    std::vector<TaskPtr> tasks;
-    tasks.emplace_back(TaskBuilder().setCPUSource().appendCPUTransform().setCPUSink().build());
-    TaskScheduler task_scheduler(std::thread::hardware_concurrency(), tasks);
-    task_scheduler.waitForFinish();
-}
-
-TEST_F(PipelineRunner, all_io)
-{
-    auto tester = [](bool is_async) {
+    for (auto _ : state)
+    {
         std::vector<TaskPtr> tasks;
-        tasks.emplace_back(TaskBuilder().setIOSource(is_async).appendIOTransform(is_async).setIOSink(is_async).build());
+        for (size_t i = 0; i < task_batch_num; ++i)
+        {
+            tasks.emplace_back(TaskBuilder().setCPUSource().appendCPUTransform().setIOSink(is_async).build());
+            tasks.emplace_back(TaskBuilder().setCPUSource().appendIOTransform(is_async).setIOSink(is_async).build());
+            tasks.emplace_back(TaskBuilder().setCPUSource().appendIOTransform(is_async).setCPUSink().build());
+            tasks.emplace_back(TaskBuilder().setIOSource(is_async).appendIOTransform(is_async).setCPUSink().build());
+            tasks.emplace_back(TaskBuilder().setIOSource(is_async).appendCPUTransform().setCPUSink().build());
+            tasks.emplace_back(TaskBuilder().setIOSource(is_async).appendCPUTransform().setIOSink(is_async).build());
+        }
         TaskScheduler task_scheduler(std::thread::hardware_concurrency(), tasks);
         task_scheduler.waitForFinish();
-    };
-
-    tester(true);
-    tester(false);
+    }
 }
-
-TEST_F(PipelineRunner, io_cpu)
-{
-    auto tester = [](bool is_async) {
-        std::vector<TaskPtr> tasks;
-        tasks.emplace_back(TaskBuilder().setCPUSource().appendCPUTransform().setIOSink(is_async).build());
-        tasks.emplace_back(TaskBuilder().setCPUSource().appendIOTransform(is_async).setIOSink(is_async).build());
-        tasks.emplace_back(TaskBuilder().setCPUSource().appendIOTransform(is_async).setCPUSink().build());
-        tasks.emplace_back(TaskBuilder().setIOSource(is_async).appendIOTransform(is_async).setCPUSink().build());
-        tasks.emplace_back(TaskBuilder().setIOSource(is_async).appendCPUTransform().setCPUSink().build());
-        tasks.emplace_back(TaskBuilder().setIOSource(is_async).appendCPUTransform().setIOSink(is_async).build());
-        TaskScheduler task_scheduler(std::thread::hardware_concurrency(), tasks);
-        task_scheduler.waitForFinish();
-    };
-
-    tester(true);
-    tester(false);
-}
+CATCH
+BENCHMARK_REGISTER_F(PipelineBench, bench)
+    ->Args({true, 1})
+    ->Args({true, 5})
+    ->Args({false, 1})
+    ->Args({false, 5});
 } // namespace DB::tests

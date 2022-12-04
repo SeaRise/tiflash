@@ -18,15 +18,16 @@
 
 namespace DB
 {
-void doCpuPart(size_t & count, size_t loop)
+size_t doCpuPart()
 {
-    count = 0;
-    for (size_t i = 0; i < loop; ++i)
+    size_t count = 0;
+    for (size_t i = 0; i < 10000000; ++i)
         count += (i + random() % 100);
+    return count;
 }
 
 void doIOPart()
 {
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
 }
 } // namespace DB

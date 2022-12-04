@@ -45,7 +45,7 @@ public:
         if (!block)
             return PStatus::NEED_MORE;
 
-        doCpuPart(count, 100000);
+        doCpuPart();
         return PStatus::NEED_MORE;
     }
 
@@ -58,9 +58,6 @@ public:
     {
         return false;
     }
-
-private:
-    size_t count = 0;
 };
 
 class AsyncIOTransform : public Transform
@@ -72,10 +69,10 @@ public:
             return PStatus::NEED_MORE;
 
         assert(!io_future);
-        io_future.emplace(DynamicThreadPool::global_instance->schedule(true, [&, block]() {
+        io_future.emplace(DynamicThreadPool::global_instance->schedule(true, [&, move_block = std::move(block)]() {
             assert(!io_block);
             doIOPart();
-            doCpuPart(count, 10);
+            io_block.emplace(std::move(move_block));
         }));
         return PStatus::BLOCKED;
     }
@@ -84,11 +81,10 @@ public:
     {
         if (io_block)
         {
-            // cpu part
-            doCpuPart(count, 1000);
+            doCpuPart();
 
-            Block block;
-            std::swap(block, io_block);
+            Block block = std::move(io_block.value());
+            io_block.reset();
             return block;
         }
         return {};
@@ -108,8 +104,7 @@ public:
 
 private:
     std::optional<std::future<void>> io_future;
-    Block io_block;
-    size_t count = 0;
+    std::optional<Block> io_block;
 };
 
 class SyncIOTransform : public Transform
@@ -121,7 +116,7 @@ public:
             return PStatus::NEED_MORE;
 
         doIOPart();
-        doCpuPart(count, 1010);
+        doCpuPart();
 
         return PStatus::NEED_MORE;
     }
@@ -135,8 +130,5 @@ public:
     {
         return false;
     }
-
-private:
-    size_t count = 0;
 };
 } // namespace DB

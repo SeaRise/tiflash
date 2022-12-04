@@ -44,7 +44,7 @@ public:
             return PStatus::FINISHED;
 
         block.clear();
-        doCpuPart(count, 10000);
+        doCpuPart();
         return PStatus::NEED_MORE;
     }
 
@@ -52,9 +52,6 @@ public:
     {
         return false;
     }
-
-private:
-    size_t count = 0;
 };
 
 class AsyncIOSink : public Sink

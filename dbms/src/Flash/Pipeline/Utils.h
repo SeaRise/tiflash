@@ -18,6 +18,6 @@
 
 namespace DB
 {
-void doCpuPart(size_t & count, size_t loop);
+size_t doCpuPart();
 void doIOPart();
 } // namespace DB

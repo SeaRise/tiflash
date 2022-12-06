@@ -48,6 +48,7 @@ extern const char exception_before_mpp_register_tunnel_for_root_mpp_task[];
 extern const char exception_during_mpp_register_tunnel_for_non_root_mpp_task[];
 extern const char exception_during_mpp_write_err_to_tunnel[];
 extern const char force_no_local_region_for_mpp_task[];
+extern const char pause_when_mpp_task_run[];
 } // namespace FailPoints
 
 MPPTask::MPPTask(const mpp::TaskMeta & meta_, const ContextPtr & context_)
@@ -289,6 +290,8 @@ void MPPTask::runImpl()
         LOG_FMT_DEBUG(log, "Estimate new thread count of query :{} including tunnel_threads: {} , receiver_threads: {}", needed_threads, dag_context->tunnel_set->getRemoteTunnelCnt(), dag_context->getNewThreadCountOfExchangeReceiver());
 
         scheduleOrWait();
+
+        FAIL_POINT_PAUSE(FailPoints::pause_when_mpp_task_run);
 
         LOG_FMT_INFO(log, "task starts running");
         memory_tracker = current_memory_tracker;

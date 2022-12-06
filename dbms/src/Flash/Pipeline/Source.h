@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include <Common/DynamicThreadPool.h>
 #include <Core/Block.h>
 #include <DataTypes/DataTypesNumber.h>
 #include <Flash/Pipeline/PStatus.h>
@@ -27,13 +26,13 @@ namespace DB
 {
 namespace
 {
-Block prepareRandomBlock(size_t rows)
+Block prepareRandomBlock()
 {
     Block block;
     for (size_t i = 0; i < 10; ++i)
     {
         DataTypePtr int64_data_type = std::make_shared<DataTypeInt64>();
-        auto int64_column = tests::ColumnGenerator::instance().generate({rows, "Int64", tests::RANDOM}).column;
+        auto int64_column = tests::ColumnGenerator::instance().generate({1, "Int64", tests::RANDOM}).column;
         block.insert(ColumnWithTypeAndName{
             std::move(int64_column),
             int64_data_type,
@@ -50,7 +49,7 @@ public:
 
     virtual Block read() = 0;
 
-    virtual bool isBlocked() = 0;
+    virtual TaskResult isBlocked() = 0;
 };
 using SourcePtr = std::unique_ptr<Source>;
 
@@ -62,18 +61,18 @@ public:
         if (block_count > 0)
         {
             --block_count;
-            return prepareRandomBlock(50000); // 5w
+            return prepareRandomBlock();
         }
         return {};
     }
 
-    bool isBlocked() override
+    TaskResult isBlocked() override
     {
-        return false;
+        return TaskResult::needMore();
     }
 
 private:
-    int block_count = 100;
+    int block_count = 5;
 };
 
 class AsyncIOSource : public Source
@@ -81,33 +80,35 @@ class AsyncIOSource : public Source
 public:
     Block read() override
     {
+        assert(!should_io);
         if (block_count > 0)
         {
             --block_count;
-            return prepareRandomBlock(50000); // 5w
+            should_io = block_count > 0;
+            return prepareRandomBlock();
         }
+        assert(0 == io_count);
         return {};
     }
 
-    bool isBlocked() override
+    TaskResult isBlocked() override
     {
-        if (!io_future)
+        if (should_io)
         {
-            io_future.emplace(DynamicThreadPool::global_instance->schedule(false, []() { doIOPart(); }));
-            return true;
+            should_io = false;
+            --io_count;
+            return TaskResult::blocked([]() { doIOPart(); });
         }
-
-        if (io_future->wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+        else
         {
-            io_future.reset();
-            return false;
+            return TaskResult::needMore();
         }
-        return true;
     }
 
 private:
-    std::optional<std::future<void>> io_future;
-    int block_count = 100;
+    bool should_io = true;
+    int io_count = 5;
+    int block_count = 5;
 };
 
 class SyncIOSource : public Source
@@ -117,19 +118,22 @@ public:
     {
         if (block_count > 0)
         {
-            --block_count;
             doIOPart();
-            return prepareRandomBlock(50000); // 5w
+            --io_count;
+            --block_count;
+            return prepareRandomBlock();
         }
+        assert(0 == io_count);
         return {};
     }
 
-    bool isBlocked() override
+    TaskResult isBlocked() override
     {
-        return false;
+        return TaskResult::needMore();
     }
 
 private:
-    int block_count = 100;
+    int io_count = 5;
+    int block_count = 5;
 };
 } // namespace DB

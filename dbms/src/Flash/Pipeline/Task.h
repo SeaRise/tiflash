@@ -32,41 +32,67 @@ public:
         , sink(std::move(sink_))
     {}
 
-    std::pair<PStatus, String> execute()
+    TaskResult execute()
     {
         try
         {
+            RUNTIME_CHECK(!blocking_job);
+
+            auto is_blocked = isBlocked();
+            if (is_blocked.status == PStatus::BLOCKED)
+            {
+                blocking_job.emplace(is_blocked.blocking_job);
+                return is_blocked;
+            }
+            else if (is_blocked.status != PStatus::NEED_MORE)
+                return is_blocked;
+
             auto [block, op_index] = fetchBlock();
-            assert(!blocked_op_index);
+            RUNTIME_CHECK(!blocked_op_index);
             for (; op_index < transforms.size(); ++op_index)
             {
-                auto op_status = transforms[op_index]->transform(block);
-                if (op_status == PStatus::NEED_MORE)
+                auto res = transforms[op_index]->transform(block);
+                if (res.status == PStatus::NEED_MORE)
                     continue;
-                else if (op_status == PStatus::BLOCKED)
+                else if (res.status == PStatus::BLOCKED)
+                {
+                    blocking_job.emplace(res.blocking_job);
                     blocked_op_index.emplace(op_index);
-                return {op_status, ""};
+                }
+                return res;
             }
-            return {sink->write(block), ""};
+            return sink->write(block);
         }
         catch (...)
         {
-            return {PStatus::FAIL, getCurrentExceptionMessage(true, true)};
+            return TaskResult::fail(getCurrentExceptionMessage(true, true));
         }
     }
 
-    bool isBlocked()
+    void doBlockingJob()
     {
-        if (sink->isBlocked())
-            return true;
-        if (blocked_op_index)
-            return transforms[*blocked_op_index]->isBlocked();
-        return source->isBlocked();
+        if (blocking_job)
+        {
+            blocking_job.value()();
+            blocking_job.reset();
+        }
     }
 
 private:
+    TaskResult isBlocked()
+    {
+        TaskResult res = sink->isBlocked();
+        if (res.status != PStatus::NEED_MORE)
+            return res;
+
+        if (blocked_op_index)
+            return transforms[*blocked_op_index]->isBlocked();
+
+        return source->isBlocked();
+    }
+
     // Block, next_op_index
-    std::pair<Block, size_t> fetchBlock()
+    std::tuple<Block, size_t> fetchBlock()
     {
         if (blocked_op_index)
         {
@@ -82,7 +108,9 @@ private:
     std::vector<TransformPtr> transforms;
     SinkPtr sink;
 
+    // block
     std::optional<int> blocked_op_index;
+    std::optional<BlockingJob> blocking_job;
 };
 using TaskPtr = std::unique_ptr<Task>;
 } // namespace DB

@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <Common/Stopwatch.h>
+#include <Common/ThreadManager.h>
 #include <Common/setThreadName.h>
 #include <Flash/Pipeline/TaskRunner.h>
 #include <Flash/Pipeline/TaskScheduler.h>
@@ -45,24 +47,38 @@ void TaskRunner::loop()
 
 void TaskRunner::handleTask(TaskPtr && task)
 {
-    auto [status, err_msg] = task->execute();
-    switch (status)
+    int64_t time_spent = 0;
+    while (true)
     {
-    case PStatus::BLOCKED:
-        scheduler.submitIO(std::move(task));
-        break;
-    case PStatus::FINISHED:
-        scheduler.finishOneTask();
-        break;
-    case PStatus::NEED_MORE:
-        scheduler.submitCPU(std::move(task));
-        break;
-    case PStatus::FAIL:
-    {
-        LOG_ERROR(logger, "task fail for err: {}", err_msg);
-        scheduler.finishOneTask();
-        break;
-    }
+        Stopwatch stopwatch {CLOCK_MONOTONIC_COARSE};
+
+        auto res = task->execute();
+        switch (res.status)
+        {
+        case PStatus::BLOCKED:
+            scheduler.submitJob(std::move(task));
+            return;
+        case PStatus::FINISHED:
+            scheduler.finishOneTask();
+            return;
+        case PStatus::NEED_MORE:
+        {
+            time_spent += stopwatch.elapsed();
+            static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
+            if (time_spent >= YIELD_MAX_TIME_SPENT)
+            {
+                scheduler.submit(std::move(task));
+                return;
+            }
+            break;
+        }
+        case PStatus::FAIL:
+        {
+            LOG_ERROR(logger, "task fail for err: {}", res.err_msg);
+            scheduler.finishOneTask();
+            return;
+        }
+        }
     }
 }
 } // namespace DB

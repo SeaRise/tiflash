@@ -21,13 +21,14 @@ namespace DB
 size_t doCpuPart()
 {
     size_t count = 0;
-    for (size_t i = 0; i < 10000000; ++i)
-        count += (i + random() % 100);
+    size_t seed = 1 + (random() % 100);
+    for (size_t i = 0; i < 19999999; ++i)
+        count += (i % seed);
     return count;
 }
 
 void doIOPart()
 {
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
 }
 } // namespace DB

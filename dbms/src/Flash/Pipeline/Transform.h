@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include <Common/DynamicThreadPool.h>
 #include <Core/Block.h>
 #include <Flash/Pipeline/PStatus.h>
 #include <Flash/Pipeline/Utils.h>
@@ -29,24 +28,24 @@ class Transform
 public:
     virtual ~Transform() = default;
 
-    virtual PStatus transform(Block & block) = 0;
+    virtual TaskResult transform(Block & block) = 0;
 
     virtual Block fetchBlock() = 0;
 
-    virtual bool isBlocked() = 0;
+    virtual TaskResult isBlocked() = 0;
 };
 using TransformPtr = std::unique_ptr<Transform>;
 
 class CPUTransform : public Transform
 {
 public:
-    PStatus transform(Block & block) override
+    TaskResult transform(Block & block) override
     {
         if (!block)
-            return PStatus::NEED_MORE;
+            return TaskResult::needMore();
 
         doCpuPart();
-        return PStatus::NEED_MORE;
+        return TaskResult::needMore();
     }
 
     Block fetchBlock() override
@@ -54,71 +53,58 @@ public:
         return {};
     }
 
-    bool isBlocked() override
+    TaskResult isBlocked() override
     {
-        return false;
+        return TaskResult::needMore();
     }
 };
 
 class AsyncIOTransform : public Transform
 {
 public:
-    PStatus transform(Block & block) override
+    TaskResult transform(Block & block) override
     {
         if (!block)
-            return PStatus::NEED_MORE;
+            return TaskResult::needMore();
 
-        assert(!io_future);
-        io_future.emplace(DynamicThreadPool::global_instance->schedule(true, [&, move_block = std::move(block)]() {
-            assert(!io_block);
+        assert(!io_block);
+        return TaskResult::blocked([&, move_block = std::move(block)]() {
             doIOPart();
             io_block.emplace(std::move(move_block));
-        }));
-        return PStatus::BLOCKED;
+        });
     }
 
     Block fetchBlock() override
     {
-        if (io_block)
-        {
-            doCpuPart();
+        doCpuPart();
 
-            Block block = std::move(io_block.value());
-            io_block.reset();
-            return block;
-        }
-        return {};
+        assert(io_block);
+        Block block = std::move(io_block.value());
+        io_block.reset();
+        return block;
     }
 
-    bool isBlocked() override
+    TaskResult isBlocked() override
     {
-        if (!io_future)
-            return false;
-        if (io_future->wait_for(std::chrono::seconds(0)) == std::future_status::ready)
-        {
-            io_future.reset();
-            return false;
-        }
-        return true;
+        return TaskResult::needMore();
     }
 
 private:
-    std::optional<std::future<void>> io_future;
     std::optional<Block> io_block;
 };
 
 class SyncIOTransform : public Transform
 {
 public:
-    PStatus transform(Block & block) override
+    TaskResult transform(Block & block) override
     {
         if (!block)
-            return PStatus::NEED_MORE;
+            return TaskResult::needMore();
 
         doIOPart();
         doCpuPart();
 
-        return PStatus::NEED_MORE;
+        return TaskResult::needMore();
     }
 
     Block fetchBlock() override
@@ -126,9 +112,9 @@ public:
         return {};
     }
 
-    bool isBlocked() override
+    TaskResult isBlocked() override
     {
-        return false;
+        return TaskResult::needMore();
     }
 };
 } // namespace DB

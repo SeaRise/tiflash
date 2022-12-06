@@ -27,4 +27,33 @@ enum class PStatus
     NEED_MORE,
     FAIL,
 };
+
+using BlockingJob = std::function<void()>;
+
+struct TaskResult
+{
+    PStatus status;
+    String err_msg;
+    BlockingJob blocking_job;
+
+    static TaskResult needMore()
+    {
+        return {PStatus::NEED_MORE, "", {}};
+    }
+
+    static TaskResult finish()
+    {
+        return {PStatus::FINISHED, "", {}};
+    }
+
+    static TaskResult fail(const String & msg)
+    {
+        return {PStatus::FAIL, msg, {}};
+    }
+
+    static TaskResult blocked(BlockingJob && blocking_job)
+    {
+        return {PStatus::BLOCKED, "", std::move(blocking_job)};
+    }
+};
 } // namespace DB

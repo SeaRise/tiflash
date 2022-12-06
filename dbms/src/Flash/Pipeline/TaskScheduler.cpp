@@ -40,7 +40,7 @@ void TaskCounter::waitAllFinished()
 }
 
 TaskScheduler::TaskScheduler(size_t thread_num, std::vector<TaskPtr> & tasks)
-    : io_reactor(*this)
+    : io_runner(*this, thread_num)
     , task_counter(tasks.size())
 {
     RUNTIME_ASSERT(thread_num > 0);
@@ -48,18 +48,7 @@ TaskScheduler::TaskScheduler(size_t thread_num, std::vector<TaskPtr> & tasks)
     for (size_t i = 0; i < thread_num; ++i)
         task_runners.emplace_back(std::make_unique<TaskRunner>(*this));
 
-    while (!tasks.empty())
-    {
-        auto & task = tasks.back();
-        assert(task);
-
-        if (task->isBlocked())
-            submitIO(std::move(task));
-        else
-            submitCPU(std::move(task));
-
-        tasks.pop_back();
-    }
+    submit(tasks);
 }
 
 bool TaskScheduler::popTask(TaskPtr & task)
@@ -82,7 +71,7 @@ bool TaskScheduler::popTask(TaskPtr & task)
     return true;
 }
 
-void TaskScheduler::submitCPU(std::vector<TaskPtr> & tasks)
+void TaskScheduler::submit(std::vector<TaskPtr> & tasks)
 {
     if (tasks.empty())
         return;
@@ -97,7 +86,7 @@ void TaskScheduler::submitCPU(std::vector<TaskPtr> & tasks)
     }
 }
 
-void TaskScheduler::submitCPU(TaskPtr && task)
+void TaskScheduler::submit(TaskPtr && task)
 {
     assert(task);
     {
@@ -107,9 +96,9 @@ void TaskScheduler::submitCPU(TaskPtr && task)
     cv.notify_one();
 }
 
-void TaskScheduler::submitIO(TaskPtr && task)
+void TaskScheduler::submitJob(TaskPtr && task)
 {
-    io_reactor.submit(std::move(task));
+    io_runner.submit(std::move(task));
 }
 
 void TaskScheduler::finishOneTask()
@@ -125,7 +114,5 @@ void TaskScheduler::waitForFinish()
         is_closed = true;
     }
     cv.notify_all();
-
-    io_reactor.finish();
 }
 } // namespace DB

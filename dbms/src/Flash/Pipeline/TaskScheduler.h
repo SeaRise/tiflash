@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include <Flash/Pipeline/IOReactor.h>
+#include <Flash/Pipeline/IORunner.h>
 #include <Flash/Pipeline/Task.h>
 #include <Flash/Pipeline/TaskRunner.h>
 
@@ -45,22 +45,22 @@ class TaskScheduler
 {
 public:
     TaskScheduler(size_t thread_num, std::vector<TaskPtr> & tasks);
-    void submitCPU(std::vector<TaskPtr> & tasks);
-    void submitCPU(TaskPtr && tasks);
-    void submitIO(TaskPtr && task);
+    void submit(std::vector<TaskPtr> & tasks);
+    void submit(TaskPtr && task);
+    void submitJob(TaskPtr && task);
     bool popTask(TaskPtr & task);
     void finishOneTask();
     void waitForFinish();
 
 private:
-    IOReactor io_reactor;
-
     mutable std::mutex global_mutex;
     std::condition_variable cv;
     bool is_closed = false;
     std::deque<TaskPtr> task_queue;
 
     std::vector<TaskRunnerPtr> task_runners;
+
+    IORunner io_runner;
 
     TaskCounter task_counter;
 

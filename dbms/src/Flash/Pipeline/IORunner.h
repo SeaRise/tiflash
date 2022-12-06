@@ -14,38 +14,41 @@
 
 #pragma once
 
+#include <Common/Logger.h>
 #include <Flash/Pipeline/Task.h>
 
-#include <list>
-#include <mutex>
+#include <deque>
 #include <thread>
+#include <vector>
+#include <memory>
+#include <mutex>
 
 namespace DB
 {
 class TaskScheduler;
 
-class IOReactor
+class IORunner
 {
 public:
-    explicit IOReactor(TaskScheduler & scheduler_);
-    void finish();
+    IORunner(TaskScheduler & scheduler_, size_t thread_num);
+    ~IORunner();
+
     void submit(TaskPtr && task);
-    ~IOReactor();
 
 private:
-    void loop();
+    bool popJob(TaskPtr & task);
 
 private:
-    mutable std::mutex mutex;
-    std::condition_variable cond;
-
     TaskScheduler & scheduler;
 
-    std::list<TaskPtr> blocked_tasks;
-    std::thread io_thread;
+    std::vector<std::thread> threads;
 
-    std::atomic<bool> is_shutdown{false};
+    mutable std::mutex job_mutex;
+    std::condition_variable cv;
+    bool is_closed = false;
+    std::deque<TaskPtr> job_queue;
 
-    LoggerPtr logger = Logger::get("IOReactor");
+    LoggerPtr logger = Logger::get("IORunner");
 };
+using IORunnerPtr = std::unique_ptr<IORunner>;
 } // namespace DB

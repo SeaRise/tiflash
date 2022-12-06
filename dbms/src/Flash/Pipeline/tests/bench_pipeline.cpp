@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <Common/getNumberOfPhysicalCPUCores.h>
 #include <Flash/Pipeline/TaskBuilder.h>
 #include <Flash/Pipeline/TaskScheduler.h>
 #include <TestUtils/FunctionTestUtils.h>
@@ -23,18 +22,6 @@ namespace DB::tests
 {
 class PipelineBench : public benchmark::Fixture
 {
-public:
-    void SetUp(const benchmark::State &) override
-    {
-        DynamicThreadPool::global_instance = std::make_unique<DynamicThreadPool>(
-            /*fixed_thread_num=*/300,
-            std::chrono::milliseconds(100000));
-    }
-
-    void TearDown(const benchmark::State &) override
-    {
-        DynamicThreadPool::global_instance.reset();
-    }
 };
 
 namespace
@@ -57,7 +44,7 @@ void fillBoolVec(std::vector<bool> & bool_vec, size_t trigger_line, FF && ff)
     bool_vec.pop_back();
 }
 
-const Int64 physical_core_num = getNumberOfPhysicalCPUCores();
+const Int64 cpu_core_num = std::thread::hardware_concurrency();
 }
 
 BENCHMARK_DEFINE_F(PipelineBench, random)
@@ -99,7 +86,7 @@ try
 
         assert(tasks.size() == pow(2, num));
 
-        TaskScheduler task_scheduler(physical_core_num, tasks);
+        TaskScheduler task_scheduler(cpu_core_num, tasks);
         task_scheduler.waitForFinish();
     }
 }
@@ -114,7 +101,7 @@ BENCHMARK_DEFINE_F(PipelineBench, fix)
 (benchmark::State & state)
 try
 {
-    // const bool is_async = state.range(0);
+    const bool is_async = state.range(0);
     const size_t task_num = state.range(1);
 
     for (auto _ : state)
@@ -123,32 +110,29 @@ try
         for (size_t i = 0; i < task_num; ++i)
         {
             tasks.emplace_back(TaskBuilder()
-                // .setIOSource(is_async)
-                .setCPUSource()
+                .setIOSource(is_async)
                 .appendCPUTransform()
                 .appendCPUTransform()
-                // .appendIOTransform(is_async)
+                .appendIOTransform(is_async)
                 .appendCPUTransform()
                 .appendCPUTransform()
-                .appendCPUTransform()
-                // .setIOSink(is_async)
-                .setCPUSink()
+                .setIOSink(is_async)
                 .build());
         }
 
         assert(tasks.size() == task_num);
-        TaskScheduler task_scheduler(physical_core_num, tasks);
+        TaskScheduler task_scheduler(cpu_core_num, tasks);
         task_scheduler.waitForFinish();
     }
 }
 CATCH
 BENCHMARK_REGISTER_F(PipelineBench, fix)
-    // ->Args({true, 1})
-    // ->Args({false, 1})
-    // ->Args({true, physical_core_num})
-    // ->Args({false, physical_core_num})
-    // ->Args({true, physical_core_num * 5})
-    // ->Args({false, physical_core_num * 5})
-    ->Args({true, physical_core_num * 20})
+    ->Args({false, 1})
+    ->Args({true, 1})
+    ->Args({false, cpu_core_num})
+    ->Args({true, cpu_core_num})
+    ->Args({false, cpu_core_num * 5})
+    ->Args({true, cpu_core_num * 5})
+    ->Iterations(5)
 ;
 } // namespace DB::tests

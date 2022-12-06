@@ -20,24 +20,17 @@ namespace DB::tests
 {
 class PipelineRunner : public ::testing::Test
 {
-protected:
-    void SetUp() override
-    {
-        DynamicThreadPool::global_instance = std::make_unique<DynamicThreadPool>(
-            /*fixed_thread_num=*/300,
-            std::chrono::milliseconds(100000));
-    }
-
-    void TearDown() override
-    {
-        DynamicThreadPool::global_instance.reset();
-    }
 };
+
+namespace
+{
+const Int64 cpu_core_num = std::thread::hardware_concurrency();
+}
 
 TEST_F(PipelineRunner, empty)
 {
     std::vector<TaskPtr> tasks;
-    TaskScheduler task_scheduler(std::thread::hardware_concurrency(), tasks);
+    TaskScheduler task_scheduler(cpu_core_num, tasks);
     task_scheduler.waitForFinish();
 }
 
@@ -45,7 +38,7 @@ TEST_F(PipelineRunner, all_cpu)
 {
     std::vector<TaskPtr> tasks;
     tasks.emplace_back(TaskBuilder().setCPUSource().appendCPUTransform().setCPUSink().build());
-    TaskScheduler task_scheduler(std::thread::hardware_concurrency(), tasks);
+    TaskScheduler task_scheduler(cpu_core_num, tasks);
     task_scheduler.waitForFinish();
 }
 
@@ -54,7 +47,7 @@ TEST_F(PipelineRunner, all_io)
     auto tester = [](bool is_async) {
         std::vector<TaskPtr> tasks;
         tasks.emplace_back(TaskBuilder().setIOSource(is_async).appendIOTransform(is_async).setIOSink(is_async).build());
-        TaskScheduler task_scheduler(std::thread::hardware_concurrency(), tasks);
+        TaskScheduler task_scheduler(cpu_core_num, tasks);
         task_scheduler.waitForFinish();
     };
 
@@ -72,7 +65,7 @@ TEST_F(PipelineRunner, io_cpu)
         tasks.emplace_back(TaskBuilder().setIOSource(is_async).appendIOTransform(is_async).setCPUSink().build());
         tasks.emplace_back(TaskBuilder().setIOSource(is_async).appendCPUTransform().setCPUSink().build());
         tasks.emplace_back(TaskBuilder().setIOSource(is_async).appendCPUTransform().setIOSink(is_async).build());
-        TaskScheduler task_scheduler(std::thread::hardware_concurrency(), tasks);
+        TaskScheduler task_scheduler(cpu_core_num, tasks);
         task_scheduler.waitForFinish();
     };
 

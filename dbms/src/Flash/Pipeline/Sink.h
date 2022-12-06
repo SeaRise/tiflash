@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include <Common/DynamicThreadPool.h>
 #include <Core/Block.h>
 #include <Flash/Pipeline/PStatus.h>
 #include <Flash/Pipeline/Utils.h>
@@ -29,75 +28,64 @@ class Sink
 public:
     virtual ~Sink() = default;
 
-    virtual PStatus write(Block & block) = 0;
+    virtual TaskResult write(Block & block) = 0;
 
-    virtual bool isBlocked() = 0;
+    virtual TaskResult isBlocked() = 0;
 };
 using SinkPtr = std::unique_ptr<Sink>;
 
 class CPUSink : public Sink
 {
 public:
-    PStatus write(Block & block) override
+    TaskResult write(Block & block) override
     {
         if (!block)
-            return PStatus::FINISHED;
+            return TaskResult::finish();
 
         block.clear();
         doCpuPart();
-        return PStatus::NEED_MORE;
+        return TaskResult::needMore();
     }
 
-    bool isBlocked() override
+    TaskResult isBlocked() override
     {
-        return false;
+        return TaskResult::needMore();
     }
 };
 
 class AsyncIOSink : public Sink
 {
 public:
-    PStatus write(Block & block) override
+    TaskResult write(Block & block) override
     {
         if (!block)
-            return PStatus::FINISHED;
+            return TaskResult::finish();
         block.clear();
-        assert(!io_future);
-        io_future.emplace(DynamicThreadPool::global_instance->schedule(false, []() { doIOPart(); }));
-        return PStatus::BLOCKED;
+
+        return TaskResult::blocked([]() { doIOPart(); });
     }
 
-    bool isBlocked() override
+    TaskResult isBlocked() override
     {
-        if (!io_future)
-            return false;
-        if (io_future->wait_for(std::chrono::seconds(0)) == std::future_status::ready)
-        {
-            io_future.reset();
-            return false;
-        }
-        return true;
+        return TaskResult::needMore();
     }
-
-private:
-    std::optional<std::future<void>> io_future;
 };
 
 class SyncIOSink : public Sink
 {
 public:
-    PStatus write(Block & block) override
+    TaskResult write(Block & block) override
     {
         if (!block)
-            return PStatus::FINISHED;
+            return TaskResult::finish();
         block.clear();
         doIOPart();
-        return PStatus::NEED_MORE;
+        return TaskResult::needMore();
     }
 
-    bool isBlocked() override
+    TaskResult isBlocked() override
     {
-        return false;
+        return TaskResult::needMore();
     }
 };
 } // namespace DB

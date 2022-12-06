@@ -70,7 +70,8 @@ std::unordered_map<String, std::shared_ptr<FailPointChannel>> FailPointHelper::f
     /* try to use logical split, could fall back to physical split */ \
     M(try_segment_logical_split)                                      \
     /* must perform logical split, otherwise throw exception */       \
-    M(force_segment_logical_split)
+    M(force_segment_logical_split)                                    \
+    M(exception_when_mpp_task_run)
 
 #define APPLY_FOR_FAILPOINTS(M)                              \
     M(skip_check_segment_update)                             \
@@ -106,8 +107,7 @@ std::unordered_map<String, std::shared_ptr<FailPointChannel>> FailPointHelper::f
     M(pause_when_writing_to_dt_store)        \
     M(pause_when_ingesting_to_dt_store)      \
     M(pause_when_altering_dt_store)          \
-    M(pause_after_copr_streams_acquired)     \
-    M(pause_when_mpp_task_run)
+    M(pause_after_copr_streams_acquired)
 
 namespace FailPoints
 {

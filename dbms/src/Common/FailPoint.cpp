@@ -98,7 +98,8 @@ std::unordered_map<String, std::shared_ptr<FailPointChannel>> FailPointHelper::f
     M(pause_before_apply_raft_cmd)                \
     M(pause_before_apply_raft_snapshot)           \
     M(pause_until_apply_raft_snapshot)            \
-    M(pause_after_copr_streams_acquired_once)
+    M(pause_after_copr_streams_acquired_once)     \
+    M(pause_when_stream_is_being_canceled)
 
 #define APPLY_FOR_FAILPOINTS_WITH_CHANNEL(M) \
     M(pause_when_reading_from_dt_stream)     \

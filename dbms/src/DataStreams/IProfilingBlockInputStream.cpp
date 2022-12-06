@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <Common/FailPoint.h>
 #include <Interpreters/Quota.h>
 #include <Interpreters/ProcessList.h>
 #include <DataStreams/IProfilingBlockInputStream.h>
@@ -30,6 +31,12 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
     extern const int BLOCKS_HAVE_DIFFERENT_STRUCTURE;
 }
+
+
+namespace FailPoints
+{
+extern const char pause_when_stream_is_being_canceled[];
+} // namespace FailPoints
 
 
 IProfilingBlockInputStream::IProfilingBlockInputStream()
@@ -356,6 +363,8 @@ void IProfilingBlockInputStream::progressImpl(const Progress & value)
 
 void IProfilingBlockInputStream::cancel(bool kill)
 {
+    FAIL_POINT_PAUSE(FailPoints::pause_when_stream_is_being_canceled);
+
     if (kill)
         is_killed = true;
 

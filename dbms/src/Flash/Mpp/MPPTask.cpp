@@ -48,6 +48,7 @@ extern const char exception_before_mpp_register_tunnel_for_root_mpp_task[];
 extern const char exception_during_mpp_register_tunnel_for_non_root_mpp_task[];
 extern const char exception_during_mpp_write_err_to_tunnel[];
 extern const char force_no_local_region_for_mpp_task[];
+extern const char exception_when_mpp_task_run[];
 } // namespace FailPoints
 
 MPPTask::MPPTask(const mpp::TaskMeta & meta_, const ContextPtr & context_)
@@ -307,6 +308,8 @@ void MPPTask::runImpl()
         auto from = getDataStream();
         from->readPrefix();
         LOG_DEBUG(log, "begin read ");
+
+        FAIL_POINT_TRIGGER_EXCEPTION(FailPoints::exception_when_mpp_task_run);
 
         while (from->read())
             continue;

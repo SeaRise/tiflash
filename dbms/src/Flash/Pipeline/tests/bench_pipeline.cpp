@@ -257,13 +257,90 @@ try
     }
 }
 CATCH
-BENCHMARK_REGISTER_F(PipelineBench, cpu_io_1)
+BENCHMARK_REGISTER_F(PipelineBench, cpu_io_2)
     ->Args({false, 1})
     ->Args({true, 1})
     ->Args({false, cpu_core_num})
     ->Args({true, cpu_core_num})
     ->Args({false, cpu_core_num * 5})
     ->Args({true, cpu_core_num * 5})
+    ->Iterations(3)
+;
+
+BENCHMARK_DEFINE_F(PipelineBench, cpu_io_3)
+(benchmark::State & state)
+try
+{
+    const bool is_async = state.range(0);
+    const size_t cpu_task_num = state.range(1);
+    const size_t io_task_num = state.range(2);
+
+    for (auto _ : state)
+    {
+        std::vector<TaskPtr> tasks;
+        size_t cpu_task_index = 0;
+        size_t io_task_index = 0;
+        size_t min_task_index = std::min(cpu_task_num, io_task_num);
+        for (; cpu_task_index < min_task_index; ++cpu_task_index, ++io_task_index)
+        {
+            tasks.emplace_back(TaskBuilder()
+                .setCPUSource()
+                .appendCPUTransform()
+                .appendCPUTransform()
+                .appendCPUTransform()
+                .appendCPUTransform()
+                .appendCPUTransform()
+                .setCPUSink()
+                .build());
+            tasks.emplace_back(TaskBuilder()
+                .setIOSource(is_async)
+                .appendIOTransform(is_async)
+                .appendIOTransform(is_async)
+                .appendIOTransform(is_async)
+                .appendIOTransform(is_async)
+                .appendIOTransform(is_async)
+                .setIOSink(is_async)
+                .build());
+        }
+        for (; cpu_task_index < cpu_task_num; ++cpu_task_index)
+        {
+            tasks.emplace_back(TaskBuilder()
+                .setCPUSource()
+                .appendCPUTransform()
+                .appendCPUTransform()
+                .appendCPUTransform()
+                .appendCPUTransform()
+                .appendCPUTransform()
+                .setCPUSink()
+                .build());
+        }
+        for (; io_task_index < io_task_num; ++io_task_index)
+        {
+            tasks.emplace_back(TaskBuilder()
+                .setIOSource(is_async)
+                .appendIOTransform(is_async)
+                .appendIOTransform(is_async)
+                .appendIOTransform(is_async)
+                .appendIOTransform(is_async)
+                .appendIOTransform(is_async)
+                .setIOSink(is_async)
+                .build());
+        }
+
+        assert(tasks.size() == (cpu_task_num + io_task_num));
+        auto task_scheduler = createTaskScheduler(is_async);
+        task_scheduler.submit(tasks);
+        task_scheduler.waitForFinish();
+    }
+}
+CATCH
+BENCHMARK_REGISTER_F(PipelineBench, cpu_io_3)
+    ->Args({false, 1, 1})
+    ->Args({true, 1, 1})
+    ->Args({false, cpu_core_num / 2, cpu_core_num / 2})
+    ->Args({true, cpu_core_num / 2, cpu_core_num / 2})
+    ->Args({false, cpu_core_num * 3, cpu_core_num * 3})
+    ->Args({true, cpu_core_num * 3, cpu_core_num * 3})
     ->Iterations(3)
 ;
 } // namespace DB::tests

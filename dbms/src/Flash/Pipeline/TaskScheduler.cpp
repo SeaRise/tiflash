@@ -111,6 +111,7 @@ void TaskScheduler::waitForFinish()
         std::lock_guard<std::mutex> lock(global_mutex);
         is_closed = true;
     }
+    io_runner.close();
     cv.notify_all();
 }
 } // namespace DB

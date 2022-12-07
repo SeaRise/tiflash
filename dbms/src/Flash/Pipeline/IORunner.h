@@ -35,6 +35,8 @@ public:
 
     void submit(TaskPtr && task);
 
+    void close();
+
 private:
     bool popJob(TaskPtr & task);
 

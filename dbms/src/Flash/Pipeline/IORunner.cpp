@@ -38,14 +38,18 @@ IORunner::IORunner(TaskScheduler & scheduler_, size_t thread_num)
 
 IORunner::~IORunner()
 {
+    for (auto & thread : threads)
+        thread.join();
+    LOG_INFO(logger, "stop io runner");
+}
+
+void IORunner::close()
+{
     {
         std::lock_guard<std::mutex> lock(job_mutex);
         is_closed = true;
     }
     cv.notify_all();
-    for (auto & thread : threads)
-        thread.join();
-    LOG_INFO(logger, "stop io runner");
 }
 
 bool IORunner::popJob(TaskPtr & task)

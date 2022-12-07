@@ -27,9 +27,10 @@ namespace DB
 {
 struct TaskCounter
 {
-    TaskCounter(size_t count)
-        : counter(count)
-    {}
+    void init(size_t count)
+    {
+        counter = count;
+    }
 
     void finishOne();
 
@@ -44,7 +45,7 @@ struct TaskCounter
 class TaskScheduler
 {
 public:
-    TaskScheduler(size_t thread_num, std::vector<TaskPtr> & tasks);
+    TaskScheduler(size_t cpu_thread_num, size_t io_thread_num);
     void submit(std::vector<TaskPtr> & tasks);
     void submit(TaskPtr && task);
     void submitJob(TaskPtr && task);

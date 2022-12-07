@@ -69,6 +69,7 @@ bool IORunner::popJob(TaskPtr & task)
 
 void IORunner::submit(TaskPtr && task)
 {
+    assert(!threads.empty());
     {
         std::lock_guard<std::mutex> lock(job_mutex);
         job_queue.push_back(std::move(task));

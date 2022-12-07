@@ -30,7 +30,8 @@ const Int64 cpu_core_num = std::thread::hardware_concurrency();
 TEST_F(PipelineRunner, empty)
 {
     std::vector<TaskPtr> tasks;
-    TaskScheduler task_scheduler(cpu_core_num, tasks);
+    TaskScheduler task_scheduler(cpu_core_num, cpu_core_num);
+    task_scheduler.submit(tasks);
     task_scheduler.waitForFinish();
 }
 
@@ -38,7 +39,8 @@ TEST_F(PipelineRunner, all_cpu)
 {
     std::vector<TaskPtr> tasks;
     tasks.emplace_back(TaskBuilder().setCPUSource().appendCPUTransform().setCPUSink().build());
-    TaskScheduler task_scheduler(cpu_core_num, tasks);
+    TaskScheduler task_scheduler(cpu_core_num, cpu_core_num);
+    task_scheduler.submit(tasks);
     task_scheduler.waitForFinish();
 }
 
@@ -47,7 +49,8 @@ TEST_F(PipelineRunner, all_io)
     auto tester = [](bool is_async) {
         std::vector<TaskPtr> tasks;
         tasks.emplace_back(TaskBuilder().setIOSource(is_async).appendIOTransform(is_async).setIOSink(is_async).build());
-        TaskScheduler task_scheduler(cpu_core_num, tasks);
+        TaskScheduler task_scheduler(cpu_core_num, cpu_core_num);
+        task_scheduler.submit(tasks);
         task_scheduler.waitForFinish();
     };
 
@@ -65,7 +68,8 @@ TEST_F(PipelineRunner, io_cpu)
         tasks.emplace_back(TaskBuilder().setIOSource(is_async).appendIOTransform(is_async).setCPUSink().build());
         tasks.emplace_back(TaskBuilder().setIOSource(is_async).appendCPUTransform().setCPUSink().build());
         tasks.emplace_back(TaskBuilder().setIOSource(is_async).appendCPUTransform().setIOSink(is_async).build());
-        TaskScheduler task_scheduler(cpu_core_num, tasks);
+        TaskScheduler task_scheduler(cpu_core_num, cpu_core_num);
+        task_scheduler.submit(tasks);
         task_scheduler.waitForFinish();
     };
 

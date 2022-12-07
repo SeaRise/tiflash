@@ -39,16 +39,13 @@ void TaskCounter::waitAllFinished()
     }
 }
 
-TaskScheduler::TaskScheduler(size_t thread_num, std::vector<TaskPtr> & tasks)
-    : io_runner(*this, thread_num)
-    , task_counter(tasks.size())
+TaskScheduler::TaskScheduler(size_t cpu_thread_num, size_t io_thread_num)
+    : io_runner(*this, io_thread_num)
 {
-    RUNTIME_ASSERT(thread_num > 0);
-    task_runners.reserve(thread_num);
-    for (size_t i = 0; i < thread_num; ++i)
+    RUNTIME_ASSERT(cpu_thread_num > 0);
+    task_runners.reserve(cpu_thread_num);
+    for (size_t i = 0; i < cpu_thread_num; ++i)
         task_runners.emplace_back(std::make_unique<TaskRunner>(*this));
-
-    submit(tasks);
 }
 
 bool TaskScheduler::popTask(TaskPtr & task)
@@ -75,6 +72,7 @@ void TaskScheduler::submit(std::vector<TaskPtr> & tasks)
 {
     if (tasks.empty())
         return;
+    task_counter.init(tasks.size());
     std::lock_guard<std::mutex> lock(global_mutex);
     while (!tasks.empty())
     {

@@ -45,6 +45,14 @@ void fillBoolVec(std::vector<bool> & bool_vec, size_t trigger_line, FF && ff)
 }
 
 const Int64 cpu_core_num = std::thread::hardware_concurrency();
+
+TaskScheduler createTaskScheduler(bool is_async)
+{
+    if (is_async)
+        return TaskScheduler{static_cast<size_t>(cpu_core_num), static_cast<size_t>(cpu_core_num)};
+    else
+        return TaskScheduler{static_cast<size_t>(cpu_core_num * 2), 0};
+}
 }
 
 BENCHMARK_DEFINE_F(PipelineBench, random)
@@ -86,16 +94,18 @@ try
 
         assert(tasks.size() == pow(2, num));
 
-        TaskScheduler task_scheduler(cpu_core_num, tasks);
+        auto task_scheduler = createTaskScheduler(is_async);
+        task_scheduler.submit(tasks);
         task_scheduler.waitForFinish();
     }
 }
 CATCH
 BENCHMARK_REGISTER_F(PipelineBench, random)
-    ->Args({true, 1})
     ->Args({false, 1})
+    ->Args({true, 1})
+    ->Args({false, 5})
     ->Args({true, 5})
-    ->Args({false, 5});
+    ->Iterations(5);
 
 BENCHMARK_DEFINE_F(PipelineBench, fix)
 (benchmark::State & state)
@@ -121,7 +131,8 @@ try
         }
 
         assert(tasks.size() == task_num);
-        TaskScheduler task_scheduler(cpu_core_num, tasks);
+        auto task_scheduler = createTaskScheduler(is_async);
+        task_scheduler.submit(tasks);
         task_scheduler.waitForFinish();
     }
 }

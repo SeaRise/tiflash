@@ -278,31 +278,7 @@ try
     for (auto _ : state)
     {
         std::vector<TaskPtr> tasks;
-        size_t cpu_task_index = 0;
-        size_t io_task_index = 0;
-        size_t min_task_index = std::min(cpu_task_num, io_task_num);
-        for (; cpu_task_index < min_task_index; ++cpu_task_index, ++io_task_index)
-        {
-            tasks.emplace_back(TaskBuilder()
-                .setCPUSource()
-                .appendCPUTransform()
-                .appendCPUTransform()
-                .appendCPUTransform()
-                .appendCPUTransform()
-                .appendCPUTransform()
-                .setCPUSink()
-                .build());
-            tasks.emplace_back(TaskBuilder()
-                .setIOSource(is_async)
-                .appendIOTransform(is_async)
-                .appendIOTransform(is_async)
-                .appendIOTransform(is_async)
-                .appendIOTransform(is_async)
-                .appendIOTransform(is_async)
-                .setIOSink(is_async)
-                .build());
-        }
-        for (; cpu_task_index < cpu_task_num; ++cpu_task_index)
+        for (size_t i = 0; i < cpu_task_num; ++i)
         {
             tasks.emplace_back(TaskBuilder()
                 .setCPUSource()
@@ -314,7 +290,7 @@ try
                 .setCPUSink()
                 .build());
         }
-        for (; io_task_index < io_task_num; ++io_task_index)
+        for (size_t i = 0; i < io_task_num; ++i)
         {
             tasks.emplace_back(TaskBuilder()
                 .setIOSource(is_async)
@@ -339,8 +315,8 @@ BENCHMARK_REGISTER_F(PipelineBench, cpu_io_3)
     ->Args({true, 1, 1})
     ->Args({false, cpu_core_num / 2, cpu_core_num / 2})
     ->Args({true, cpu_core_num / 2, cpu_core_num / 2})
-    ->Args({false, cpu_core_num * 3, cpu_core_num * 3})
-    ->Args({true, cpu_core_num * 3, cpu_core_num * 3})
+    ->Args({false, cpu_core_num * 2, cpu_core_num * 2})
+    ->Args({true, cpu_core_num * 2, cpu_core_num * 2})
     ->Iterations(3)
 ;
 } // namespace DB::tests

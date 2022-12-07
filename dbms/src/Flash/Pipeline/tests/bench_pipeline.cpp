@@ -55,7 +55,7 @@ TaskScheduler createTaskScheduler(bool is_async)
 }
 }
 
-BENCHMARK_DEFINE_F(PipelineBench, random)
+BENCHMARK_DEFINE_F(PipelineBench, all_case)
 (benchmark::State & state)
 try
 {
@@ -100,14 +100,94 @@ try
     }
 }
 CATCH
-BENCHMARK_REGISTER_F(PipelineBench, random)
+BENCHMARK_REGISTER_F(PipelineBench, all_case)
     ->Args({false, 1})
     ->Args({true, 1})
     ->Args({false, 5})
     ->Args({true, 5})
     ->Iterations(5);
 
-BENCHMARK_DEFINE_F(PipelineBench, fix)
+BENCHMARK_DEFINE_F(PipelineBench, all_cpu)
+(benchmark::State & state)
+try
+{
+    const bool is_async = state.range(0);
+    const size_t task_num = state.range(1);
+
+    for (auto _ : state)
+    {
+        std::vector<TaskPtr> tasks;
+        for (size_t i = 0; i < task_num; ++i)
+        {
+            tasks.emplace_back(TaskBuilder()
+                .setCPUSource()
+                .appendCPUTransform()
+                .appendCPUTransform()
+                .appendCPUTransform()
+                .appendCPUTransform()
+                .appendCPUTransform()
+                .setCPUSink()
+                .build());
+        }
+
+        assert(tasks.size() == task_num);
+        auto task_scheduler = createTaskScheduler(is_async);
+        task_scheduler.submit(tasks);
+        task_scheduler.waitForFinish();
+    }
+}
+CATCH
+BENCHMARK_REGISTER_F(PipelineBench, all_cpu)
+    ->Args({false, 1})
+    ->Args({true, 1})
+    ->Args({false, cpu_core_num})
+    ->Args({true, cpu_core_num})
+    ->Args({false, cpu_core_num * 5})
+    ->Args({true, cpu_core_num * 5})
+    ->Iterations(5)
+;
+
+BENCHMARK_DEFINE_F(PipelineBench, all_io)
+(benchmark::State & state)
+try
+{
+    const bool is_async = state.range(0);
+    const size_t task_num = state.range(1);
+
+    for (auto _ : state)
+    {
+        std::vector<TaskPtr> tasks;
+        for (size_t i = 0; i < task_num; ++i)
+        {
+            tasks.emplace_back(TaskBuilder()
+                .setIOSource(is_async)
+                .appendIOTransform(is_async)
+                .appendIOTransform(is_async)
+                .appendIOTransform(is_async)
+                .appendIOTransform(is_async)
+                .appendIOTransform(is_async)
+                .setIOSink(is_async)
+                .build());
+        }
+
+        assert(tasks.size() == task_num);
+        auto task_scheduler = createTaskScheduler(is_async);
+        task_scheduler.submit(tasks);
+        task_scheduler.waitForFinish();
+    }
+}
+CATCH
+BENCHMARK_REGISTER_F(PipelineBench, all_io)
+    ->Args({false, 1})
+    ->Args({true, 1})
+    ->Args({false, cpu_core_num})
+    ->Args({true, cpu_core_num})
+    ->Args({false, cpu_core_num * 5})
+    ->Args({true, cpu_core_num * 5})
+    ->Iterations(5)
+;
+
+BENCHMARK_DEFINE_F(PipelineBench, cpu_io)
 (benchmark::State & state)
 try
 {
@@ -137,7 +217,7 @@ try
     }
 }
 CATCH
-BENCHMARK_REGISTER_F(PipelineBench, fix)
+BENCHMARK_REGISTER_F(PipelineBench, cpu_io)
     ->Args({false, 1})
     ->Args({true, 1})
     ->Args({false, cpu_core_num})

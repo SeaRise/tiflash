@@ -22,7 +22,7 @@ size_t doCpuPart()
 {
     size_t count = 0;
     size_t seed = 1 + (random() % 100);
-    for (size_t i = 0; i < 19999999; ++i)
+    for (size_t i = 0; i < 9999999; ++i)
         count += (i % seed);
     return count;
 }

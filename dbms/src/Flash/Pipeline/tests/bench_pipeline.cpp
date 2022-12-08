@@ -317,6 +317,10 @@ BENCHMARK_REGISTER_F(PipelineBench, cpu_io_3)
     ->Args({true, cpu_core_num / 2, cpu_core_num / 2})
     ->Args({false, cpu_core_num * 2, cpu_core_num * 2})
     ->Args({true, cpu_core_num * 2, cpu_core_num * 2})
+    ->Args({false, cpu_core_num * 4, cpu_core_num * 1})
+    ->Args({true, cpu_core_num * 4, cpu_core_num * 1})
+    ->Args({false, cpu_core_num * 1, cpu_core_num * 4})
+    ->Args({true, cpu_core_num * 1, cpu_core_num * 4})
     ->Iterations(3)
 ;
 } // namespace DB::tests

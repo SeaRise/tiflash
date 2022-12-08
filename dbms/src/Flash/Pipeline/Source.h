@@ -60,6 +60,7 @@ public:
     {
         if (block_count > 0)
         {
+            doCpuPart();
             --block_count;
             return prepareRandomBlock();
         }

@@ -76,8 +76,6 @@ public:
 
     Block fetchBlock() override
     {
-        doCpuPart();
-
         assert(io_block);
         Block block = std::move(io_block.value());
         io_block.reset();
@@ -100,10 +98,7 @@ public:
     {
         if (!block)
             return TaskResult::needMore();
-
         doIOPart();
-        doCpuPart();
-
         return TaskResult::needMore();
     }
 

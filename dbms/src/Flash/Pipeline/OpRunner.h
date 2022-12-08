@@ -12,23 +12,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <Flash/Pipeline/Utils.h>
+#pragma once
 
-#include <thread>
+#include <common/types.h>
+#include <memory>
+#include <mutex>
 
 namespace DB
 {
-size_t doCpuPart()
+struct IOToken
 {
-    size_t count = 0;
-    size_t seed = 1 + (random() % 100);
-    for (size_t i = 0; i < 9999999; ++i)
-        count += (i % seed);
-    return count;
-}
+    mutable std::mutex token_mu;
+    std::condition_variable cv;
+    size_t io_token_num = 0;
+    size_t used_io_token_num = 0;
 
-void doIOPart()
+    void reset(size_t io_token_num_ = 0);
+
+    void pop();
+
+    void push();
+};
+
+struct OpRunner
 {
-    std::this_thread::sleep_for(std::chrono::milliseconds(800));
-}
+    void reset(size_t cpu_factor_ = 1, size_t io_factor_ = 1, size_t io_token_num_ = 0);
+
+    size_t doCpuOp();
+    
+    void doIOOp();
+
+    static OpRunner & getInstance();
+
+    size_t cpu_factor = 1;
+    size_t io_factor = 1;
+
+    IOToken io_token;
+};
 } // namespace DB

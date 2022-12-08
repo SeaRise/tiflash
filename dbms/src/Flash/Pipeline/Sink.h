@@ -16,7 +16,7 @@
 
 #include <Core/Block.h>
 #include <Flash/Pipeline/PStatus.h>
-#include <Flash/Pipeline/Utils.h>
+#include <Flash/Pipeline/OpRunner.h>
 #include <common/types.h>
 
 #include <memory>
@@ -43,7 +43,7 @@ public:
             return TaskResult::finish();
 
         block.clear();
-        doCpuPart();
+        OpRunner::getInstance().doCpuOp();
         return TaskResult::needMore();
     }
 
@@ -62,7 +62,7 @@ public:
             return TaskResult::finish();
         block.clear();
 
-        return TaskResult::blocked([]() { doIOPart(); });
+        return TaskResult::blocked([]() { OpRunner::getInstance().doIOOp(); });
     }
 
     TaskResult isBlocked() override
@@ -79,7 +79,7 @@ public:
         if (!block)
             return TaskResult::finish();
         block.clear();
-        doIOPart();
+        OpRunner::getInstance().doIOOp();
         return TaskResult::needMore();
     }
 

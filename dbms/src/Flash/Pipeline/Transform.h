@@ -16,7 +16,7 @@
 
 #include <Core/Block.h>
 #include <Flash/Pipeline/PStatus.h>
-#include <Flash/Pipeline/Utils.h>
+#include <Flash/Pipeline/OpRunner.h>
 #include <common/types.h>
 
 #include <memory>
@@ -44,7 +44,7 @@ public:
         if (!block)
             return TaskResult::needMore();
 
-        doCpuPart();
+        OpRunner::getInstance().doCpuOp();
         return TaskResult::needMore();
     }
 
@@ -69,7 +69,7 @@ public:
 
         assert(!io_block);
         return TaskResult::blocked([&, move_block = std::move(block)]() {
-            doIOPart();
+            OpRunner::getInstance().doIOOp();
             io_block.emplace(std::move(move_block));
         });
     }
@@ -98,7 +98,7 @@ public:
     {
         if (!block)
             return TaskResult::needMore();
-        doIOPart();
+        OpRunner::getInstance().doIOOp();
         return TaskResult::needMore();
     }
 

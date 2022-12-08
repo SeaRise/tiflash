@@ -18,6 +18,7 @@
 #include <DataTypes/DataTypesNumber.h>
 #include <Flash/Pipeline/PStatus.h>
 #include <TestUtils/ColumnGenerator.h>
+#include <Flash/Pipeline/OpRunner.h>
 #include <common/types.h>
 
 #include <memory>
@@ -60,7 +61,7 @@ public:
     {
         if (block_count > 0)
         {
-            doCpuPart();
+            OpRunner::getInstance().doCpuOp();
             --block_count;
             return prepareRandomBlock();
         }
@@ -98,7 +99,7 @@ public:
         {
             should_io = false;
             --io_count;
-            return TaskResult::blocked([]() { doIOPart(); });
+            return TaskResult::blocked([]() { OpRunner::getInstance().doIOOp(); });
         }
         else
         {
@@ -119,7 +120,7 @@ public:
     {
         if (block_count > 0)
         {
-            doIOPart();
+            OpRunner::getInstance().doIOOp();
             --io_count;
             --block_count;
             return prepareRandomBlock();

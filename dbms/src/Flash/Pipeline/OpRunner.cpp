@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <common/types.h>
 #include <Flash/Pipeline/OpRunner.h>
 
 #include <thread>
@@ -34,11 +35,11 @@ void OpRunner::reset(size_t cpu_factor_, size_t io_factor_, size_t io_token_num_
 
 size_t OpRunner::doCpuOp()
 {
-    size_t count = 0;
-    size_t seed = 1 + (random() % 100);
-    size_t loop_size = 39999999 * cpu_factor;
+    Float64 count = 0;
+    Float64 seed = 1.1 + (random() % 100);
+    size_t loop_size = 99999999 * cpu_factor;
     for (size_t i = 0; i < loop_size; ++i)
-        count += (i % seed);
+        count += (static_cast<Float64>(i) / seed);
     return count;
 }
 

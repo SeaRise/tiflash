@@ -207,4 +207,58 @@ BENCHMARK_REGISTER_F(PipelineBench, cpu_task_and_io_task)
     ->Args({true, cpu_core_num / 2, cpu_core_num * 4})
     ->Iterations(3)
 ;
+
+BENCHMARK_DEFINE_F(PipelineBench, cpu_task_and_big_io_task)
+(benchmark::State & state)
+try
+{
+    const bool is_async = state.range(0);
+    const size_t io_factor = state.range(1);
+
+    OpRunner::getInstance().reset(1, io_factor, cpu_core_num);
+
+    for (auto _ : state)
+    {
+        std::vector<TaskPtr> tasks;
+        size_t task_num = cpu_core_num * 2;
+        size_t cpu_task_num = cpu_core_num / 4;
+        size_t io_task_num = task_num - cpu_task_num;
+        for (size_t i = 0; i < cpu_task_num; ++i)
+        {
+            tasks.emplace_back(TaskBuilder()
+                .setCPUSource()
+                .appendCPUTransform()
+                .setCPUSink()
+                .build());
+        }
+        for (size_t i = 0; i < io_task_num; ++i)
+        {
+            tasks.emplace_back(TaskBuilder()
+                .setIOSource(is_async)
+                .appendIOTransform(is_async)
+                .setIOSink(is_async)
+                .build());
+        }
+
+        std::random_device rd;
+        std::mt19937 g(rd());
+        std::shuffle(tasks.begin(), tasks.end(), g);
+
+        auto task_scheduler = createTaskScheduler(is_async);
+        task_scheduler.submit(tasks);
+        task_scheduler.waitForFinish();
+    }
+
+    OpRunner::getInstance().reset(1, 1, cpu_core_num);
+}
+CATCH
+BENCHMARK_REGISTER_F(PipelineBench, cpu_task_and_io_task)
+    ->Args({false, 1})
+    ->Args({true, 1})
+    ->Args({false, 5})
+    ->Args({true, 5})
+    ->Args({false, 10})
+    ->Args({true, 10})
+    ->Iterations(3)
+;
 } // namespace DB::tests

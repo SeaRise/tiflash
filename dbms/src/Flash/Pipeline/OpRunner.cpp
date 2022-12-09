@@ -36,7 +36,7 @@ size_t OpRunner::doCpuOp()
 {
     size_t count = 0;
     size_t seed = 1 + (random() % 100);
-    size_t loop_size = 19999999 * cpu_factor;
+    size_t loop_size = 39999999 * cpu_factor;
     for (size_t i = 0; i < loop_size; ++i)
         count += (i % seed);
     return count;
@@ -73,7 +73,7 @@ void IOToken::push()
 void OpRunner::doIOOp()
 {
     io_token.pop();
-    std::this_thread::sleep_for(std::chrono::milliseconds(1000 * io_factor));
+    std::this_thread::sleep_for(std::chrono::milliseconds(500 * io_factor));
     io_token.push();
 }
 

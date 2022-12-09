@@ -36,12 +36,12 @@ public:
     {
         try
         {
-            RUNTIME_CHECK(!blocking_job);
+            assert(!blocking_job);
 
             auto is_blocked = isBlocked();
             if (is_blocked.status == PStatus::BLOCKED)
             {
-                blocking_job.emplace(is_blocked.blocking_job);
+                blocking_job.emplace(std::move(is_blocked.blocking_job));
                 return is_blocked;
             }
             else if (is_blocked.status != PStatus::NEED_MORE)
@@ -56,12 +56,15 @@ public:
                     continue;
                 else if (res.status == PStatus::BLOCKED)
                 {
-                    blocking_job.emplace(res.blocking_job);
+                    blocking_job.emplace(std::move(res.blocking_job));
                     blocked_op_index.emplace(op_index);
                 }
                 return res;
             }
-            return sink->write(block);
+            auto res = sink->write(block);
+            if (res.status == PStatus::BLOCKED)
+                blocking_job.emplace(std::move(res.blocking_job));
+            return res;
         }
         catch (...)
         {
@@ -71,11 +74,9 @@ public:
 
     void doBlockingJob()
     {
-        if (blocking_job)
-        {
-            blocking_job.value()();
-            blocking_job.reset();
-        }
+        assert(blocking_job);
+        blocking_job.value()();
+        blocking_job.reset();
     }
 
 private:

@@ -60,8 +60,8 @@ public:
     {
         if (!block)
             return TaskResult::finish();
-        block.clear();
 
+        block.clear();
         return TaskResult::blocked([]() { OpRunner::getInstance().doIOOp(); });
     }
 

@@ -60,10 +60,6 @@ try
             tasks.emplace_back(TaskBuilder()
                 .setCPUSource()
                 .appendCPUTransform()
-                .appendCPUTransform()
-                .appendCPUTransform()
-                .appendCPUTransform()
-                .appendCPUTransform()
                 .setCPUSink()
                 .build());
         }
@@ -99,10 +95,6 @@ try
         {
             tasks.emplace_back(TaskBuilder()
                 .setIOSource(is_async)
-                .appendIOTransform(is_async)
-                .appendIOTransform(is_async)
-                .appendIOTransform(is_async)
-                .appendIOTransform(is_async)
                 .appendIOTransform(is_async)
                 .setIOSink(is_async)
                 .build());
@@ -140,9 +132,7 @@ try
             tasks.emplace_back(TaskBuilder()
                 .setIOSource(is_async)
                 .appendCPUTransform()
-                .appendCPUTransform()
                 .appendIOTransform(is_async)
-                .appendCPUTransform()
                 .appendCPUTransform()
                 .setIOSink(is_async)
                 .build());
@@ -181,10 +171,6 @@ try
             tasks.emplace_back(TaskBuilder()
                 .setCPUSource()
                 .appendCPUTransform()
-                .appendCPUTransform()
-                .appendCPUTransform()
-                .appendCPUTransform()
-                .appendCPUTransform()
                 .setCPUSink()
                 .build());
         }
@@ -192,10 +178,6 @@ try
         {
             tasks.emplace_back(TaskBuilder()
                 .setIOSource(is_async)
-                .appendIOTransform(is_async)
-                .appendIOTransform(is_async)
-                .appendIOTransform(is_async)
-                .appendIOTransform(is_async)
                 .appendIOTransform(is_async)
                 .setIOSink(is_async)
                 .build());

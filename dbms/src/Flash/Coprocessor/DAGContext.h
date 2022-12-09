@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <Storages/DeltaMerge/ScanContext.h>
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #ifdef __clang__
@@ -171,7 +172,6 @@ public:
     // for test
     explicit DAGContext(UInt64 max_error_count_)
         : dag_request(nullptr)
-        , dummy_query_string("")
         , dummy_ast(makeDummyQuery())
         , collect_execution_summaries(false)
         , is_mpp_task(false)
@@ -312,6 +312,15 @@ public:
     }
     void addCoprocessorReader(const CoprocessorReaderPtr & coprocessor_reader);
     std::vector<CoprocessorReaderPtr> & getCoprocessorReaders();
+    void setDisaggregatedComputeExchangeReceiver(const String & executor_id, const ExchangeReceiverPtr & receiver)
+    {
+        disaggregated_compute_exchange_receiver = std::make_pair(executor_id, receiver);
+    }
+    std::optional<std::pair<String, ExchangeReceiverPtr>> getDisaggregatedComputeExchangeReceiver()
+    {
+        return disaggregated_compute_exchange_receiver;
+    }
+
 
     void addSubquery(const String & subquery_id, SubqueryForSet && subquery);
     bool hasSubquery() const { return !subqueries.empty(); }
@@ -357,6 +366,12 @@ public:
     /// It is used to ensure that the order of Execution summary of list based executors is the same as the order of list based executors.
     std::vector<String> list_based_executors_order;
 
+    /// executor_id, ScanContextPtr
+    /// Currently, max(scan_context_map.size()) == 1, because one mpp task only have do one table scan
+    /// While when we support collcate join later, scan_context_map.size() may > 1,
+    /// thus we need to pay attention to scan_context_map usage that time.
+    std::unordered_map<String, DM::ScanContextPtr> scan_context_map;
+
 private:
     void initExecutorIdToJoinIdMap();
     void initOutputInfo();
@@ -388,6 +403,9 @@ private:
     /// vector of SubqueriesForSets(such as join build subquery).
     /// The order of the vector is also the order of the subquery.
     std::vector<SubqueriesForSets> subqueries;
+    // In disaggregated tiflash mode, table_scan in tiflash_compute node will be converted ExchangeReceiver.
+    // Record here so we can add to receiver_set and cancel/close it.
+    std::optional<std::pair<String, ExchangeReceiverPtr>> disaggregated_compute_exchange_receiver;
 };
 
 } // namespace DB

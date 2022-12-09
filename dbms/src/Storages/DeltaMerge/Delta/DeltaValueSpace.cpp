@@ -379,10 +379,13 @@ bool DeltaValueSpace::compact(DMContext & context)
         log_storage_snap = context.storage_pool.logReader()->getSnapshot(/*tracing_id*/ fmt::format("minor_compact_{}", simpleInfo()));
     }
 
-    // do compaction task
     WriteBatches wbs(context.storage_pool, context.getWriteLimiter());
-    const auto & reader = context.storage_pool.newLogReader(context.getReadLimiter(), log_storage_snap);
-    compaction_task->prepare(context, wbs, reader);
+    {
+        // do compaction task
+        const auto & reader = context.storage_pool.newLogReader(context.getReadLimiter(), log_storage_snap);
+        compaction_task->prepare(context, wbs, reader);
+        log_storage_snap.reset(); // release the snapshot ASAP
+    }
 
     {
         std::scoped_lock lock(mutex);
@@ -401,7 +404,10 @@ bool DeltaValueSpace::compact(DMContext & context)
             LOG_DEBUG(log, "Compact stop because structure got updated, delta={}", simpleInfo());
             return false;
         }
-
+        // Reset to 0 if the minor compaction succeed,
+        // and it may trigger another minor compaction if there is still too many column files.
+        // This process will stop when there is no more minor compaction to be done.
+        last_try_compact_column_files.store(0);
         LOG_DEBUG(log, "{} delta={}", compaction_task->info(), info());
     }
     wbs.writeRemoves();

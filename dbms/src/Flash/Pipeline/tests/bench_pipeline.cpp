@@ -253,7 +253,7 @@ try
     }
 }
 CATCH
-BENCHMARK_REGISTER_F(PipelineBench, cpu_task_and_io_task)
+BENCHMARK_REGISTER_F(PipelineBench, cpu_task_and_cpu_io_task)
     ->Args({false, 1, 1})
     ->Args({true, 1, 1})
     ->Args({false, cpu_core_num / 2, cpu_core_num / 2})

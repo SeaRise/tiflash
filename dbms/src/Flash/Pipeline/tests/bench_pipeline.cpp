@@ -203,8 +203,71 @@ BENCHMARK_REGISTER_F(PipelineBench, cpu_task_and_io_task)
     ->Args({true, cpu_core_num * 2, cpu_core_num * 2})
     ->Args({false, cpu_core_num * 4, cpu_core_num / 2})
     ->Args({true, cpu_core_num * 4, cpu_core_num / 2})
+    ->Args({false, cpu_core_num * 4, cpu_core_num / 4})
+    ->Args({true, cpu_core_num * 4, cpu_core_num / 4})
     ->Args({false, cpu_core_num / 2, cpu_core_num * 4})
     ->Args({true, cpu_core_num / 2, cpu_core_num * 4})
+    ->Args({false, cpu_core_num / 4, cpu_core_num * 4})
+    ->Args({true, cpu_core_num / 4, cpu_core_num * 4})
+    ->Iterations(3)
+;
+
+BENCHMARK_DEFINE_F(PipelineBench, cpu_task_and_cpu_io_task)
+(benchmark::State & state)
+try
+{
+    const bool is_async = state.range(0);
+    const size_t cpu_task_num = state.range(1);
+    const size_t cpu_io_task_num = state.range(2);
+
+    for (auto _ : state)
+    {
+        std::vector<TaskPtr> tasks;
+        for (size_t i = 0; i < cpu_task_num; ++i)
+        {
+            tasks.emplace_back(TaskBuilder()
+                .setCPUSource()
+                .appendCPUTransform()
+                .setCPUSink()
+                .build());
+        }
+        for (size_t i = 0; i < cpu_io_task_num; ++i)
+        {
+            tasks.emplace_back(TaskBuilder()
+                .setIOSource(is_async)
+                .appendCPUTransform()
+                .appendIOTransform(is_async)
+                .appendCPUTransform()
+                .setIOSink(is_async)
+                .build());
+        }
+
+        assert(tasks.size() == (cpu_task_num + cpu_io_task_num));
+        std::random_device rd;
+        std::mt19937 g(rd());
+        std::shuffle(tasks.begin(), tasks.end(), g);
+
+        auto task_scheduler = createTaskScheduler(is_async);
+        task_scheduler.submit(tasks);
+        task_scheduler.waitForFinish();
+    }
+}
+CATCH
+BENCHMARK_REGISTER_F(PipelineBench, cpu_task_and_io_task)
+    ->Args({false, 1, 1})
+    ->Args({true, 1, 1})
+    ->Args({false, cpu_core_num / 2, cpu_core_num / 2})
+    ->Args({true, cpu_core_num / 2, cpu_core_num / 2})
+    ->Args({false, cpu_core_num * 2, cpu_core_num * 2})
+    ->Args({true, cpu_core_num * 2, cpu_core_num * 2})
+    ->Args({false, cpu_core_num * 4, cpu_core_num / 2})
+    ->Args({true, cpu_core_num * 4, cpu_core_num / 2})
+    ->Args({false, cpu_core_num * 4, cpu_core_num / 4})
+    ->Args({true, cpu_core_num * 4, cpu_core_num / 4})
+    ->Args({false, cpu_core_num / 2, cpu_core_num * 4})
+    ->Args({true, cpu_core_num / 2, cpu_core_num * 4})
+    ->Args({false, cpu_core_num / 4, cpu_core_num * 4})
+    ->Args({true, cpu_core_num / 4, cpu_core_num * 4})
     ->Iterations(3)
 ;
 
@@ -220,7 +283,7 @@ try
     for (auto _ : state)
     {
         std::vector<TaskPtr> tasks;
-        size_t task_num = cpu_core_num * 2;
+        size_t task_num = cpu_core_num * 5;
         size_t cpu_task_num = cpu_core_num / 4;
         size_t io_task_num = task_num - cpu_task_num;
         for (size_t i = 0; i < cpu_task_num; ++i)
@@ -252,7 +315,7 @@ try
     OpRunner::getInstance().reset(1, 1, cpu_core_num);
 }
 CATCH
-BENCHMARK_REGISTER_F(PipelineBench, cpu_task_and_io_task)
+BENCHMARK_REGISTER_F(PipelineBench, cpu_task_and_big_io_task)
     ->Args({false, 1})
     ->Args({true, 1})
     ->Args({false, 5})

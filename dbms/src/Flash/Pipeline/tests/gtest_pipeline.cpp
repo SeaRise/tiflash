@@ -20,6 +20,15 @@ namespace DB::tests
 {
 class PipelineRunner : public ::testing::Test
 {
+    void SetUp() override
+    {
+        OpRunner::getInstance().reset(0, 0, 0);
+    }
+
+    void TearDown() override
+    {
+        OpRunner::getInstance().reset();
+    }
 };
 
 namespace

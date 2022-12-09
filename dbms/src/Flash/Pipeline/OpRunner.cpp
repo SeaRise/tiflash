@@ -73,7 +73,7 @@ void IOToken::push()
 void OpRunner::doIOOp()
 {
     io_token.pop();
-    std::this_thread::sleep_for(std::chrono::milliseconds(800 * io_factor));
+    std::this_thread::sleep_for(std::chrono::milliseconds(500 * io_factor));
     io_token.push();
 }
 

@@ -31,6 +31,32 @@ TaskScheduler createTaskScheduler(bool is_async)
     else
         return TaskScheduler{static_cast<size_t>(cpu_core_num * 2), 0};
 }
+
+std::vector<TaskPtr> genTasks(size_t cpu_task_num, size_t io_task_num, bool is_async)
+{
+    std::vector<TaskPtr> tasks;
+    for (size_t i = 0; i < cpu_task_num; ++i)
+    {
+        tasks.emplace_back(TaskBuilder()
+            .setCPUSource()
+            .appendCPUTransform()
+            .setCPUSink()
+            .build());
+    }
+    for (size_t i = 0; i < io_task_num; ++i)
+    {
+        tasks.emplace_back(TaskBuilder()
+            .setIOSource(is_async)
+            .appendIOTransform(is_async)
+            .setIOSink(is_async)
+            .build());
+    }
+
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(tasks.begin(), tasks.end(), g);
+    return tasks;
+}
 }
 
 class PipelineBench : public benchmark::Fixture
@@ -165,29 +191,7 @@ try
 
     for (auto _ : state)
     {
-        std::vector<TaskPtr> tasks;
-        for (size_t i = 0; i < cpu_task_num; ++i)
-        {
-            tasks.emplace_back(TaskBuilder()
-                .setCPUSource()
-                .appendCPUTransform()
-                .setCPUSink()
-                .build());
-        }
-        for (size_t i = 0; i < io_task_num; ++i)
-        {
-            tasks.emplace_back(TaskBuilder()
-                .setIOSource(is_async)
-                .appendIOTransform(is_async)
-                .setIOSink(is_async)
-                .build());
-        }
-
-        assert(tasks.size() == (cpu_task_num + io_task_num));
-        std::random_device rd;
-        std::mt19937 g(rd());
-        std::shuffle(tasks.begin(), tasks.end(), g);
-
+        auto tasks = genTasks(cpu_task_num, io_task_num, is_async);
         auto task_scheduler = createTaskScheduler(is_async);
         task_scheduler.submit(tasks);
         task_scheduler.waitForFinish();
@@ -234,11 +238,9 @@ try
         for (size_t i = 0; i < cpu_io_task_num; ++i)
         {
             tasks.emplace_back(TaskBuilder()
-                .setIOSource(is_async)
-                .appendCPUTransform()
+                .setCPUSource()
                 .appendIOTransform(is_async)
-                .appendCPUTransform()
-                .setIOSink(is_async)
+                .setCPUSink()
                 .build());
         }
 
@@ -282,30 +284,10 @@ try
 
     for (auto _ : state)
     {
-        std::vector<TaskPtr> tasks;
         size_t task_num = cpu_core_num * 5;
         size_t cpu_task_num = cpu_core_num / 4;
         size_t io_task_num = task_num - cpu_task_num;
-        for (size_t i = 0; i < cpu_task_num; ++i)
-        {
-            tasks.emplace_back(TaskBuilder()
-                .setCPUSource()
-                .appendCPUTransform()
-                .setCPUSink()
-                .build());
-        }
-        for (size_t i = 0; i < io_task_num; ++i)
-        {
-            tasks.emplace_back(TaskBuilder()
-                .setIOSource(is_async)
-                .appendIOTransform(is_async)
-                .setIOSink(is_async)
-                .build());
-        }
-
-        std::random_device rd;
-        std::mt19937 g(rd());
-        std::shuffle(tasks.begin(), tasks.end(), g);
+        auto tasks = genTasks(cpu_task_num, io_task_num, is_async);
 
         auto task_scheduler = createTaskScheduler(is_async);
         task_scheduler.submit(tasks);

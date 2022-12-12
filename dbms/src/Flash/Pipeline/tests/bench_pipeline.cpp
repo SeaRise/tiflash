@@ -116,10 +116,10 @@ CATCH
 BENCHMARK_REGISTER_F(PipelineBench, io_task)
     ->Args({false, 1})
     ->Args({true, 1})
-    // ->Args({false, cpu_core_num})
-    // ->Args({true, cpu_core_num})
-    // ->Args({false, cpu_core_num * 5})
-    // ->Args({true, cpu_core_num * 5})
+    ->Args({false, cpu_core_num})
+    ->Args({true, cpu_core_num})
+    ->Args({false, cpu_core_num * 5})
+    ->Args({true, cpu_core_num * 5})
     ->Iterations(3)
 ;
 
@@ -253,7 +253,7 @@ BENCHMARK_REGISTER_F(PipelineBench, cpu_task_and_cpu_io_task)
     ->Iterations(3)
 ;
 
-BENCHMARK_DEFINE_F(PipelineBench, bench_test1)
+BENCHMARK_DEFINE_F(PipelineBench, special_case)
 (benchmark::State & state)
 try
 {
@@ -273,61 +273,7 @@ try
     OpRunner::getInstance().reset(cpu_core_num, 20, 20);
 }
 CATCH
-BENCHMARK_REGISTER_F(PipelineBench, bench_test1)
-    ->Args({false, 1})
-    ->Args({true, 1})
-    ->Args({false, 5})
-    ->Args({true, 5})
-    ->Args({false, 10})
-    ->Args({true, 10})
-    ->Args({false, 20})
-    ->Args({true, 20})
-    ->Args({false, 50})
-    ->Args({true, 50})
-    ->Iterations(3)
-;
-
-BENCHMARK_DEFINE_F(PipelineBench, bench_test2)
-(benchmark::State & state)
-try
-{
-    const bool is_async = state.range(0);
-    const size_t io_factor = state.range(1);
-
-    OpRunner::getInstance().reset(cpu_core_num, io_factor * 20, 5, 1, io_factor);
-
-    for (auto _ : state)
-    {
-        std::vector<TaskPtr> tasks;
-        for (size_t i = 0; i < static_cast<size_t>(cpu_core_num * 4); ++i)
-        {
-            tasks.emplace_back(TaskBuilder()
-                .setCPUSource()
-                .appendCPUTransform()
-                .setCPUSink()
-                .build());
-        }
-        for (size_t i = 0; i < static_cast<size_t>(cpu_core_num * 12); ++i)
-        {
-            tasks.emplace_back(TaskBuilder()
-                .setCPUSource()
-                .appendIOTransform(is_async)
-                .setCPUSink()
-                .build());
-        }
-        std::random_device rd;
-        std::mt19937 g(rd());
-        std::shuffle(tasks.begin(), tasks.end(), g);
-
-        auto task_scheduler = createTaskScheduler(is_async);
-        task_scheduler.submit(tasks);
-        task_scheduler.waitForFinish();
-    }
-
-    OpRunner::getInstance().reset(cpu_core_num, 20, 20);
-}
-CATCH
-BENCHMARK_REGISTER_F(PipelineBench, bench_test2)
+BENCHMARK_REGISTER_F(PipelineBench, special_case)
     ->Args({false, 1})
     ->Args({true, 1})
     ->Args({false, 5})

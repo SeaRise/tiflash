@@ -264,27 +264,27 @@ try
 
     for (auto _ : state)
     {
-        std::vector<TaskPtr> tasks;
+        auto tasks = genTasks(cpu_core_num * 4, cpu_core_num * 12, is_async);
+        // std::vector<TaskPtr> tasks;
+        // for (size_t i = 0; i < static_cast<size_t>(cpu_core_num * 4); ++i)
+        // {
+        //     tasks.emplace_back(TaskBuilder()
+        //         .setCPUSource()
+        //         .appendCPUTransform()
+        //         .setCPUSink()
+        //         .build());
+        // }
         // for (size_t i = 0; i < static_cast<size_t>(cpu_core_num * 12); ++i)
-        for (size_t i = 0; i < static_cast<size_t>(cpu_core_num * 4); ++i)
-        {
-            tasks.emplace_back(TaskBuilder()
-                .setCPUSource()
-                .appendCPUTransform()
-                .setCPUSink()
-                .build());
-        }
-        for (size_t i = 0; i < static_cast<size_t>(cpu_core_num * 12); ++i)
-        {
-            tasks.emplace_back(TaskBuilder()
-                .setCPUSource()
-                .appendIOTransform(is_async)
-                .setCPUSink()
-                .build());
-        }
-        std::random_device rd;
-        std::mt19937 g(rd());
-        std::shuffle(tasks.begin(), tasks.end(), g);
+        // {
+        //     tasks.emplace_back(TaskBuilder()
+        //         .setCPUSource()
+        //         .appendIOTransform(is_async)
+        //         .setCPUSink()
+        //         .build());
+        // }
+        // std::random_device rd;
+        // std::mt19937 g(rd());
+        // std::shuffle(tasks.begin(), tasks.end(), g);
 
         auto task_scheduler = createTaskScheduler(is_async);
         task_scheduler.submit(tasks);

@@ -260,7 +260,7 @@ try
     const bool is_async = state.range(0);
     const size_t io_factor = state.range(1);
 
-    OpRunner::getInstance().reset(cpu_core_num, 20, 5, 1, io_factor);
+    OpRunner::getInstance().reset(cpu_core_num, io_factor * 20, 5, 1, io_factor);
 
     for (auto _ : state)
     {

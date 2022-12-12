@@ -260,12 +260,13 @@ try
     const bool is_async = state.range(0);
     const size_t io_factor = state.range(1);
 
-    OpRunner::getInstance().reset(cpu_core_num, 20, 20, 1, io_factor);
+    OpRunner::getInstance().reset(cpu_core_num, 20, 5, 1, io_factor);
 
     for (auto _ : state)
     {
         std::vector<TaskPtr> tasks;
-        for (size_t i = 0; i < static_cast<size_t>(cpu_core_num * 12); ++i)
+        // for (size_t i = 0; i < static_cast<size_t>(cpu_core_num * 12); ++i)
+        for (size_t i = 0; i < static_cast<size_t>(cpu_core_num * 4); ++i)
         {
             tasks.emplace_back(TaskBuilder()
                 .setCPUSource()
@@ -273,7 +274,7 @@ try
                 .setCPUSink()
                 .build());
         }
-        for (size_t i = 0; i < static_cast<size_t>(cpu_core_num * 4); ++i)
+        for (size_t i = 0; i < static_cast<size_t>(cpu_core_num * 12); ++i)
         {
             tasks.emplace_back(TaskBuilder()
                 .setCPUSource()

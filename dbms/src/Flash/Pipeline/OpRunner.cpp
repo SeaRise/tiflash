@@ -26,18 +26,25 @@ void IOToken::reset(size_t io_token_num_)
     io_token_num = io_token_num_;
 }
 
-void OpRunner::reset(size_t cpu_factor_, size_t io_factor_, size_t io_token_num_)
+void OpRunner::reset(
+    size_t io_token_num_,
+    size_t cpu_block_num_,
+    size_t io_block_num_,
+    size_t cpu_factor_,
+    size_t io_factor_)
 {
+    io_token.reset(io_token_num_);
+    cpu_block_num = cpu_block_num_;
+    io_block_num = io_block_num_;
     cpu_factor = cpu_factor_;
     io_factor = io_factor_;
-    io_token.reset(io_token_num_);
 }
 
 size_t OpRunner::doCpuOp()
 {
     Float64 count = 0;
     Float64 seed = 1.1 + (random() % 100);
-    size_t loop_size = 99999999 * cpu_factor;
+    size_t loop_size = 2999999 * cpu_factor;
     for (size_t i = 0; i < loop_size; ++i)
         count += (static_cast<Float64>(i) / seed);
     return count;
@@ -74,7 +81,7 @@ void IOToken::push()
 void OpRunner::doIOOp()
 {
     io_token.pop();
-    std::this_thread::sleep_for(std::chrono::milliseconds(500 * io_factor));
+    std::this_thread::sleep_for(std::chrono::milliseconds(10 * io_factor));
     io_token.push();
 }
 

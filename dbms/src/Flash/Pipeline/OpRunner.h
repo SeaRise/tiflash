@@ -35,13 +35,21 @@ struct IOToken
 
 struct OpRunner
 {
-    void reset(size_t cpu_factor_ = 1, size_t io_factor_ = 1, size_t io_token_num_ = 0);
+    void reset(
+        size_t io_token_num_ = 0,
+        size_t cpu_block_num_ = 1,
+        size_t io_block_num_ = 1,
+        size_t cpu_factor_ = 1,
+        size_t io_factor_ = 1);
 
     size_t doCpuOp();
     
     void doIOOp();
 
     static OpRunner & getInstance();
+
+    size_t cpu_block_num = 1;
+    size_t io_block_num = 1;
 
     size_t cpu_factor = 1;
     size_t io_factor = 1;

@@ -63,7 +63,7 @@ class PipelineBench : public benchmark::Fixture
 {
     void SetUp(const benchmark::State &) override
     {
-        OpRunner::getInstance().reset(1, 1, cpu_core_num);
+        OpRunner::getInstance().reset(cpu_core_num, 20, 20);
     }
     void TearDown(const benchmark::State &) override
     {
@@ -80,17 +80,7 @@ try
 
     for (auto _ : state)
     {
-        std::vector<TaskPtr> tasks;
-        for (size_t i = 0; i < task_num; ++i)
-        {
-            tasks.emplace_back(TaskBuilder()
-                .setCPUSource()
-                .appendCPUTransform()
-                .setCPUSink()
-                .build());
-        }
-
-        assert(tasks.size() == task_num);
+        auto tasks = genTasks(task_num, 0, is_async);
         auto task_scheduler = createTaskScheduler(is_async);
         task_scheduler.submit(tasks);
         task_scheduler.waitForFinish();
@@ -116,17 +106,7 @@ try
 
     for (auto _ : state)
     {
-        std::vector<TaskPtr> tasks;
-        for (size_t i = 0; i < task_num; ++i)
-        {
-            tasks.emplace_back(TaskBuilder()
-                .setIOSource(is_async)
-                .appendIOTransform(is_async)
-                .setIOSink(is_async)
-                .build());
-        }
-
-        assert(tasks.size() == task_num);
+        auto tasks = genTasks(0, task_num, is_async);
         auto task_scheduler = createTaskScheduler(is_async);
         task_scheduler.submit(tasks);
         task_scheduler.waitForFinish();
@@ -136,10 +116,10 @@ CATCH
 BENCHMARK_REGISTER_F(PipelineBench, io_task)
     ->Args({false, 1})
     ->Args({true, 1})
-    ->Args({false, cpu_core_num})
-    ->Args({true, cpu_core_num})
-    ->Args({false, cpu_core_num * 5})
-    ->Args({true, cpu_core_num * 5})
+    // ->Args({false, cpu_core_num})
+    // ->Args({true, cpu_core_num})
+    // ->Args({false, cpu_core_num * 5})
+    // ->Args({true, cpu_core_num * 5})
     ->Iterations(3)
 ;
 
@@ -273,39 +253,6 @@ BENCHMARK_REGISTER_F(PipelineBench, cpu_task_and_cpu_io_task)
     ->Iterations(3)
 ;
 
-BENCHMARK_DEFINE_F(PipelineBench, cpu_task_and_big_io_task)
-(benchmark::State & state)
-try
-{
-    const bool is_async = state.range(0);
-    const size_t io_factor = state.range(1);
-
-    OpRunner::getInstance().reset(1, io_factor, cpu_core_num);
-
-    for (auto _ : state)
-    {
-        size_t cpu_task_num = cpu_core_num * 4;
-        size_t io_task_num = cpu_core_num * 12;
-        auto tasks = genTasks(cpu_task_num, io_task_num, is_async);
-
-        auto task_scheduler = createTaskScheduler(is_async);
-        task_scheduler.submit(tasks);
-        task_scheduler.waitForFinish();
-    }
-
-    OpRunner::getInstance().reset(1, 1, cpu_core_num);
-}
-CATCH
-BENCHMARK_REGISTER_F(PipelineBench, cpu_task_and_big_io_task)
-    ->Args({false, 1})
-    ->Args({true, 1})
-    ->Args({false, 5})
-    ->Args({true, 5})
-    ->Args({false, 10})
-    ->Args({true, 10})
-    ->Iterations(3)
-;
-
 BENCHMARK_DEFINE_F(PipelineBench, bench_test)
 (benchmark::State & state)
 try
@@ -313,7 +260,7 @@ try
     const bool is_async = state.range(0);
     const size_t io_factor = state.range(1);
 
-    OpRunner::getInstance().reset(1, io_factor, cpu_core_num);
+    OpRunner::getInstance().reset(cpu_core_num, 20, 20, 1, io_factor);
 
     for (auto _ : state)
     {
@@ -343,20 +290,20 @@ try
         task_scheduler.waitForFinish();
     }
 
-    OpRunner::getInstance().reset(1, 1, cpu_core_num);
+    OpRunner::getInstance().reset(cpu_core_num, 20, 20);
 }
 CATCH
 BENCHMARK_REGISTER_F(PipelineBench, bench_test)
     ->Args({false, 1})
     ->Args({true, 1})
-    ->Args({false, 3})
-    ->Args({true, 3})
     ->Args({false, 5})
     ->Args({true, 5})
-    ->Args({false, 7})
-    ->Args({true, 7})
     ->Args({false, 10})
     ->Args({true, 10})
+    ->Args({false, 20})
+    ->Args({true, 20})
+    ->Args({false, 50})
+    ->Args({true, 50})
     ->Iterations(3)
 ;
 } // namespace DB::tests

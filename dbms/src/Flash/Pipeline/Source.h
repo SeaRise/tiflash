@@ -74,7 +74,7 @@ public:
     }
 
 private:
-    int block_count = 5;
+    int block_count = OpRunner::getInstance().cpu_block_num;
 };
 
 class AsyncIOSource : public Source
@@ -89,7 +89,6 @@ public:
             should_io = block_count > 0;
             return prepareRandomBlock();
         }
-        assert(0 == io_count);
         return {};
     }
 
@@ -98,7 +97,6 @@ public:
         if (should_io)
         {
             should_io = false;
-            --io_count;
             return TaskResult::blocked([]() { OpRunner::getInstance().doIOOp(); });
         }
         else
@@ -109,8 +107,7 @@ public:
 
 private:
     bool should_io = true;
-    int io_count = 5;
-    int block_count = 5;
+    int block_count = OpRunner::getInstance().io_block_num;
 };
 
 class SyncIOSource : public Source
@@ -121,11 +118,9 @@ public:
         if (block_count > 0)
         {
             OpRunner::getInstance().doIOOp();
-            --io_count;
             --block_count;
             return prepareRandomBlock();
         }
-        assert(0 == io_count);
         return {};
     }
 
@@ -135,7 +130,6 @@ public:
     }
 
 private:
-    int io_count = 5;
-    int block_count = 5;
+    int block_count = OpRunner::getInstance().io_block_num;
 };
 } // namespace DB

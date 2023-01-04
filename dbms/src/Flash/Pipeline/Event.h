@@ -48,7 +48,7 @@ public:
 
     void schedule();
 
-    void finishTask();
+    void finishTask(const LocalTaskProfileInfo & task_profile_info);
 
     bool isNonDependent();
 

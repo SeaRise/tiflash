@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <Common/Logger.h>
 #include <Flash/Executor/QueryExecutor.h>
 #include <Flash/Pipeline/PipelineExecStatus.h>
 
@@ -54,7 +55,8 @@ public:
     PipelineExecutor(
         const ProcessListEntryPtr & process_list_entry_,
         Context & context_,
-        const Pipelines & pipelines_);
+        const Pipelines & pipelines_,
+        const String & req_id);
 
     String toString() const override;
 
@@ -72,5 +74,7 @@ private:
     PipelinePtr root_pipeline;
 
     PipelineExecStatus status;
+
+    LoggerPtr log;
 };
 } // namespace DB

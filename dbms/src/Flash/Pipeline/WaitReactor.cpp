@@ -44,11 +44,11 @@ public:
         case ExecTaskStatus::WAITING:
             return false;
         case ExecTaskStatus::RUNNING:
-            task->profile_info.await_time += task->profile_info.elapsed();
+            task->profile_info.addAwaitTime();
             ready_tasks.push_back(std::move(task));
             return true;
         case FINISH_STATUS:
-            task->profile_info.await_time += task->profile_info.elapsed();
+            task->profile_info.addAwaitTime();
             task.reset();
             return true;
         default:

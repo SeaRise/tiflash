@@ -15,6 +15,7 @@
 #pragma once
 
 #include <Flash/Executor/ExecutionResult.h>
+#include <Flash/Pipeline/TaskProfileInfo.h>
 
 #include <atomic>
 #include <mutex>
@@ -57,6 +58,14 @@ public:
     {
         return is_cancelled;
     }
+
+    void update(const LocalTaskProfileInfo & task_profile_info)
+    {
+        profile_info.merge(task_profile_info);
+    }
+
+public:
+    GlobalTaskProfileInfo profile_info;
 
 private:
     std::mutex mu;

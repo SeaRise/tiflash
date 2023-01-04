@@ -22,10 +22,12 @@ namespace DB
 PipelineExecutor::PipelineExecutor(
     const ProcessListEntryPtr & process_list_entry_,
     Context & context_,
-    const Pipelines & pipelines_)
+    const Pipelines & pipelines_,
+    const String & req_id)
     : QueryExecutor(process_list_entry_)
     , context(context_)
     , pipelines(pipelines_)
+    , log(Logger::get(req_id))
 {
     assert(!pipelines.empty());
     root_pipeline = pipelines[0];
@@ -60,6 +62,7 @@ ExecutionResult PipelineExecutor::execute(ResultHandler result_handler)
     {
         status.wait();
     }
+    LOG_INFO(log, "query finish with {}", status.profile_info.toJson());
     return status.toExecutionResult();
 }
 

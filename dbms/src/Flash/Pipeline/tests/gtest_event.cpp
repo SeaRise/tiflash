@@ -33,7 +33,7 @@ public:
 
     ~BaseTask()
     {
-        event->finishTask();
+        event->finishTask(profile_info);
         event.reset();
     }
 
@@ -91,7 +91,7 @@ public:
 
     ~RunTask()
     {
-        event->finishTask();
+        event->finishTask(profile_info);
         event.reset();
     }
 
@@ -146,7 +146,7 @@ public:
 
     ~WaitCancelTask()
     {
-        event->finishTask();
+        event->finishTask(profile_info);
         event.reset();
     }
 
@@ -235,6 +235,91 @@ protected:
     void finalizeFinish() override
     {
         assert(mem_tracker.get() == current_memory_tracker);
+    }
+};
+
+enum class ProfileTaskStatus
+{
+    initing,
+    running,
+    waiting,
+    spilling,
+};
+class TestPorfileTask : public Task
+{
+public:
+    static constexpr size_t sleep_time = 200'000'000L;
+
+    explicit TestPorfileTask(const EventPtr & event_)
+        : Task(nullptr)
+        , event(event_)
+    {}
+
+    ~TestPorfileTask()
+    {
+        event->finishTask(profile_info);
+        event.reset();
+    }
+
+protected:
+    ExecTaskStatus executeImpl() override
+    {
+        switch (status)
+        {
+        case ProfileTaskStatus::initing:
+            status = ProfileTaskStatus::waiting;
+            return ExecTaskStatus::WAITING;
+        case ProfileTaskStatus::waiting:
+            status = ProfileTaskStatus::spilling;
+            return ExecTaskStatus::SPILLING;
+        case ProfileTaskStatus::spilling:
+        {
+            status = ProfileTaskStatus::running;
+            std::this_thread::sleep_for(std::chrono::nanoseconds(sleep_time));
+            return ExecTaskStatus::FINISHED;
+        }
+        default:
+            __builtin_unreachable();
+        }
+    }
+
+    ExecTaskStatus spillImpl() override
+    {
+        assert(status == ProfileTaskStatus::spilling);
+        std::this_thread::sleep_for(std::chrono::nanoseconds(sleep_time));
+        return ExecTaskStatus::RUNNING;
+    }
+
+    ExecTaskStatus awaitImpl() override
+    {
+        if (status == ProfileTaskStatus::waiting)
+            std::this_thread::sleep_for(std::chrono::nanoseconds(sleep_time));
+        return ExecTaskStatus::RUNNING;
+    }
+
+private:
+    EventPtr event;
+    ProfileTaskStatus status{ProfileTaskStatus::initing};
+};
+
+class TestPorfileEvent : public Event
+{
+public:
+    explicit TestPorfileEvent(PipelineExecStatus & exec_status_)
+        : Event(exec_status_, nullptr)
+    {}
+
+    static constexpr size_t task_num = 10;
+
+protected:
+    // Returns true meaning no task is scheduled.
+    bool scheduleImpl() override
+    {
+        std::vector<TaskPtr> tasks;
+        for (size_t i = 0; i < task_num; ++i)
+            tasks.push_back(std::make_unique<TestPorfileTask>(shared_from_this()));
+        scheduleTask(tasks);
+        return false;
     }
 };
 } // namespace
@@ -415,6 +500,23 @@ try
     auto tracker = MemoryTracker::create();
     auto event = std::make_shared<AssertMemoryTraceEvent>(exec_status, tracker);
     event->schedule();
+    wait(exec_status);
+    assertNoErr(exec_status);
+}
+CATCH
+
+TEST_F(EventTestRunner, profile)
+try
+{
+    PipelineExecStatus exec_status;
+    auto event = std::make_shared<TestPorfileEvent>(exec_status);
+    event->schedule();
+    wait(exec_status);
+    assertNoErr(exec_status);
+    size_t expect = TestPorfileEvent::task_num * TestPorfileTask::sleep_time;
+    ASSERT_TRUE(exec_status.profile_info.execute_time > expect);
+    ASSERT_TRUE(exec_status.profile_info.spill_time > expect);
+    ASSERT_TRUE(exec_status.profile_info.await_time > expect);
 }
 CATCH
 

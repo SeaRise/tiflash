@@ -72,7 +72,7 @@ public:
     }
 
 public:
-    TaskProfileInfo profile_info;
+    LocalTaskProfileInfo profile_info;
 
 protected:
     virtual ExecTaskStatus executeImpl() = 0;

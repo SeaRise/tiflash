@@ -129,7 +129,7 @@ std::optional<QueryExecutorPtr> pipelineExecute(Context & context, bool internal
     physical_plan.build(dag_context.dag_request);
     physical_plan.outputAndOptimize();
     auto pipelines = physical_plan.toPipelines();
-    auto executor = std::make_unique<PipelineExecutor>(process_list_entry, context, pipelines);
+    auto executor = std::make_unique<PipelineExecutor>(process_list_entry, context, pipelines, logger->identifier());
     if (likely(!internal))
         LOG_DEBUG(logger, fmt::format("Query pipeline:\n{}", executor->toString()));
     return {std::move(executor)};

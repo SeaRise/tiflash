@@ -14,21 +14,24 @@
 
 #pragma once
 
-#include <common/types.h>
+#include <Common/FmtUtils.h>
 #include <Common/Stopwatch.h>
+
+#include <atomic>
 
 namespace DB
 {
+template <typename UnitType>
 class TaskProfileInfo
 {
 public:
-    size_t execute_time = 0;
-    size_t execute_pending_time = 0;
-    
-    size_t spill_time = 0;
-    size_t spill_pending_time = 0;
-    
-    size_t await_time = 0;
+    UnitType execute_time = 0;
+    UnitType execute_pending_time = 0;
+
+    UnitType spill_time = 0;
+    UnitType spill_pending_time = 0;
+
+    UnitType await_time = 0;
 
 public:
     void startTimer()
@@ -41,8 +44,57 @@ public:
         return stopwatch.elapsed();
     }
 
+    void addExecuteTime(size_t value)
+    {
+        execute_time += value;
+    }
+
+    void addExecutePendingTime()
+    {
+        execute_pending_time += elapsed();
+    }
+
+    void addSpillTime(size_t value)
+    {
+        spill_time += value;
+    }
+
+    void addSpillPendingTime()
+    {
+        spill_pending_time += elapsed();
+    }
+
+    void addAwaitTime()
+    {
+        await_time += elapsed();
+    }
+
+    template <typename Other>
+    void merge(const Other & other)
+    {
+        execute_time += other.execute_time;
+        execute_pending_time += other.execute_pending_time;
+        spill_time += other.spill_time;
+        spill_pending_time += other.spill_pending_time;
+        await_time += other.await_time;
+    }
+
+    String toJson() const
+    {
+        return fmt::format(
+            R"({{"execute_time_ns":{},"execute_pending_time_ns":{},"spill_time_ns":{},"spill_pending_time_ns":{},"await_time_ns":{}}})",
+            execute_time,
+            execute_pending_time,
+            spill_time,
+            spill_pending_time,
+            await_time);
+    }
+
 private:
-    Stopwatch stopwatch {CLOCK_MONOTONIC_COARSE};
+    Stopwatch stopwatch{CLOCK_MONOTONIC_COARSE};
 };
+
+using LocalTaskProfileInfo = TaskProfileInfo<size_t>;
+using GlobalTaskProfileInfo = TaskProfileInfo<std::atomic_size_t>;
 
 } // namespace DB

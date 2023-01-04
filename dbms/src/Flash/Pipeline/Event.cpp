@@ -98,9 +98,10 @@ void Event::scheduleTask(std::vector<TaskPtr> & tasks)
     TaskScheduler::instance->submit(tasks);
 }
 
-void Event::finishTask()
+void Event::finishTask(const LocalTaskProfileInfo & task_profile_info)
 {
     assert(status != EventStatus::FINISHED);
+    exec_status.update(task_profile_info);
     auto cur_value = unfinished_tasks.fetch_sub(1);
     assert(cur_value >= 1);
     if (1 == cur_value)

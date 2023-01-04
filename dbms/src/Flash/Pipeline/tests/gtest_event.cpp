@@ -154,7 +154,10 @@ protected:
     ExecTaskStatus executeImpl() override
     {
         while (!event->isCancelled())
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
             return ExecTaskStatus::RUNNING;
+        }
         return ExecTaskStatus::CANCELLED;
     }
 
@@ -296,7 +299,10 @@ protected:
         if (status == ProfileTaskStatus::waiting)
         {
             if (wait_stopwatch.elapsed() < sleep_time)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 return ExecTaskStatus::WAITING;
+            }
         }
         return ExecTaskStatus::RUNNING;
     }
@@ -326,6 +332,34 @@ protected:
         scheduleTask(tasks);
         return false;
     }
+};
+
+class ManyTasksEvent : public Event
+{
+public:
+    ManyTasksEvent(
+        PipelineExecStatus & exec_status_,
+        size_t task_num_)
+        : Event(exec_status_, nullptr)
+        , task_num(task_num_)
+    {}
+
+protected:
+    // Returns true meaning no task is scheduled.
+    bool scheduleImpl() override
+    {
+        if (0 == task_num)
+            return true;
+
+        std::vector<TaskPtr> tasks;
+        for (size_t i = 0; i < task_num; ++i)
+            tasks.push_back(std::make_unique<RunTask>(shared_from_this()));
+        scheduleTask(tasks);
+        return false;
+    }
+
+private:
+    size_t task_num;
 };
 } // namespace
 
@@ -403,7 +437,7 @@ try
             schedule(all_events);
         }
         wait(exec_status);
-        ASSERT_TRUE(0 == counter);
+        ASSERT_EQ(0, counter);
         assertNoErr(exec_status);
     };
     for (size_t group_num = 1; group_num < 50; group_num += 11)
@@ -526,6 +560,20 @@ try
     do_assert(exec_status.profile_info.execute_time);
     do_assert(exec_status.profile_info.spill_time);
     do_assert(exec_status.profile_info.await_time);
+}
+CATCH
+
+TEST_F(EventTestRunner, many_tasks)
+try
+{
+    for (size_t i = 0; i < 200; i += 7)
+    {
+        PipelineExecStatus exec_status;
+        auto event = std::make_shared<ManyTasksEvent>(exec_status, i);
+        event->schedule();
+        wait(exec_status);
+        assertNoErr(exec_status);
+    }
 }
 CATCH
 

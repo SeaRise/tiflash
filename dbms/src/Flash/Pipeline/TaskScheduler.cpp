@@ -47,6 +47,7 @@ void TaskScheduler::submit(std::vector<TaskPtr> & tasks)
     for (auto & task : tasks)
     {
         assert(task);
+        task->profile_info.startTimer();
         auto status = task->await();
         switch (status)
         {

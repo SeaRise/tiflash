@@ -65,32 +65,36 @@ void TaskExecutor::handleTask(TaskPtr & task)
 {
     assert(task);
     TRACE_MEMORY(task);
+    task->profile_info.execute_pending_time += task->profile_info.elapsed();
     int64_t time_spent = 0;
     while (true)
     {
-        Stopwatch stopwatch{CLOCK_MONOTONIC_COARSE};
         assert(task);
         auto status = task->execute();
+        time_spent += task->profile_info.elapsed();
         switch (status)
         {
         case ExecTaskStatus::RUNNING:
         {
-            time_spent += stopwatch.elapsed();
             static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
             if (time_spent >= YIELD_MAX_TIME_SPENT)
             {
+                task->profile_info.execute_time += time_spent;
                 submit(std::move(task));
                 return;
             }
             break;
         }
         case ExecTaskStatus::WAITING:
+            task->profile_info.execute_time += time_spent;
             scheduler.wait_reactor.submit(std::move(task));
             return;
         case ExecTaskStatus::SPILLING:
+            task->profile_info.execute_time += time_spent;
             scheduler.spill_executor.submit(std::move(task));
             return;
         case FINISH_STATUS:
+            task->profile_info.execute_time += time_spent;
             task.reset();
             return;
         default:

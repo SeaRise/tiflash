@@ -15,6 +15,7 @@
 #pragma once
 
 #include <Common/MemoryTracker.h>
+#include <Flash/Pipeline/TaskProfileInfo.h>
 #include <memory.h>
 
 namespace DB
@@ -69,6 +70,9 @@ public:
         assert(getMemTracker().get() == current_memory_tracker);
         return awaitImpl();
     }
+
+public:
+    TaskProfileInfo profile_info;
 
 protected:
     virtual ExecTaskStatus executeImpl() = 0;

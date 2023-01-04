@@ -54,17 +54,21 @@ void SpillExecutor::submit(TaskPtr && task)
 void SpillExecutor::handleTask(TaskPtr && task)
 {
     assert(task);
+    task->profile_info.spill_pending_time += task->profile_info.elapsed();
     TRACE_MEMORY(task);
     auto status = task->spill();
     switch (status)
     {
     case ExecTaskStatus::RUNNING:
+        task->profile_info.spill_time += task->profile_info.elapsed();
         scheduler.task_executor.submit(std::move(task));
         break;
     case ExecTaskStatus::SPILLING:
+        task->profile_info.spill_time += task->profile_info.elapsed();
         submit(std::move(task));
         break;
     case FINISH_STATUS:
+        task->profile_info.spill_time += task->profile_info.elapsed();
         task.reset();
         break;
     default:

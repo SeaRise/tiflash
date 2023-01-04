@@ -39,34 +39,34 @@ public:
         stopwatch.start();
     }
 
-    size_t elapsed()
+    UInt64 elapsedFromPrev()
     {
-        return stopwatch.elapsed();
+        return stopwatch.elapsedFromLastTime();
     }
 
-    void addExecuteTime(size_t value)
+    void addExecuteTime(UInt64 value)
     {
         execute_time += value;
     }
 
     void addExecutePendingTime()
     {
-        execute_pending_time += elapsed();
+        execute_pending_time += elapsedFromPrev();
     }
 
-    void addSpillTime(size_t value)
+    void addSpillTime(UInt64 value)
     {
         spill_time += value;
     }
 
     void addSpillPendingTime()
     {
-        spill_pending_time += elapsed();
+        spill_pending_time += elapsedFromPrev();
     }
 
     void addAwaitTime()
     {
-        await_time += elapsed();
+        await_time += elapsedFromPrev();
     }
 
     template <typename Other>
@@ -94,7 +94,7 @@ private:
     Stopwatch stopwatch{CLOCK_MONOTONIC_COARSE};
 };
 
-using LocalTaskProfileInfo = TaskProfileInfo<size_t>;
-using GlobalTaskProfileInfo = TaskProfileInfo<std::atomic_size_t>;
+using LocalTaskProfileInfo = TaskProfileInfo<UInt64>;
+using GlobalTaskProfileInfo = TaskProfileInfo<std::atomic_uint64_t>;
 
 } // namespace DB

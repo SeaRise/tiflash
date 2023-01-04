@@ -66,17 +66,17 @@ void TaskExecutor::handleTask(TaskPtr & task)
     assert(task);
     task->profile_info.addExecutePendingTime();
     TRACE_MEMORY(task);
-    int64_t time_spent = 0;
+    UInt64 time_spent = 0;
     while (true)
     {
         assert(task);
         auto status = task->execute();
-        time_spent += task->profile_info.elapsed();
+        time_spent += task->profile_info.elapsedFromPrev();
         switch (status)
         {
         case ExecTaskStatus::RUNNING:
         {
-            static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
+            static constexpr UInt64 YIELD_MAX_TIME_SPENT = 100'000'000L;
             if (time_spent >= YIELD_MAX_TIME_SPENT)
             {
                 task->profile_info.addExecuteTime(time_spent);

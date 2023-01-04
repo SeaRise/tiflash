@@ -268,6 +268,7 @@ protected:
         {
         case ProfileTaskStatus::initing:
             status = ProfileTaskStatus::waiting;
+            wait_stopwatch.start();
             return ExecTaskStatus::WAITING;
         case ProfileTaskStatus::waiting:
             status = ProfileTaskStatus::spilling;
@@ -293,13 +294,17 @@ protected:
     ExecTaskStatus awaitImpl() override
     {
         if (status == ProfileTaskStatus::waiting)
-            std::this_thread::sleep_for(std::chrono::nanoseconds(sleep_time));
+        {
+            if (wait_stopwatch.elapsed() < sleep_time)
+                return ExecTaskStatus::WAITING;
+        }
         return ExecTaskStatus::RUNNING;
     }
 
 private:
     EventPtr event;
     ProfileTaskStatus status{ProfileTaskStatus::initing};
+    Stopwatch wait_stopwatch{CLOCK_MONOTONIC_COARSE};
 };
 
 class TestPorfileEvent : public Event
@@ -513,10 +518,14 @@ try
     event->schedule();
     wait(exec_status);
     assertNoErr(exec_status);
-    size_t expect = TestPorfileEvent::task_num * TestPorfileTask::sleep_time;
-    ASSERT_TRUE(exec_status.profile_info.execute_time > expect);
-    ASSERT_TRUE(exec_status.profile_info.spill_time > expect);
-    ASSERT_TRUE(exec_status.profile_info.await_time > expect);
+    size_t lower_limit = TestPorfileEvent::task_num * TestPorfileTask::sleep_time;
+    size_t upper_limit = lower_limit * 1.3;
+    auto do_assert = [&](UInt64 value) {
+        ASSERT_TRUE(lower_limit <= value && value < upper_limit);
+    };
+    do_assert(exec_status.profile_info.execute_time);
+    do_assert(exec_status.profile_info.spill_time);
+    do_assert(exec_status.profile_info.await_time);
 }
 CATCH
 

@@ -25,7 +25,9 @@ namespace DB
 class UnitQueue
 {
 public:
-    UnitQueue(UInt64 time_slice_): time_slice(time_slice_) {}
+    UnitQueue(UInt64 time_slice_)
+        : time_slice(time_slice_)
+    {}
 
     void submit(TaskPtr && task);
 
@@ -48,7 +50,7 @@ private:
 };
 using UnitQueuePtr = std::unique_ptr<UnitQueue>;
 
-template<typename TimeGetter>
+template <typename TimeGetter>
 class MultiLevelFeedbackQueue : public TaskQueue
 {
 public:
@@ -63,7 +65,8 @@ public:
         }
 
         double factor = 1;
-        for (int i = QUEUE_SIZE - 1; i >= 0; --i) {
+        for (int i = QUEUE_SIZE - 1; i >= 0; --i)
+        {
             // initialize factor for every unit queue,
             // Higher priority queues have more execution time,
             // so they have a larger factor.
@@ -115,7 +118,7 @@ public:
             {
                 if (unlikely(is_closed))
                     return false;
-    
+
                 // Find the queue with the smallest execution time.
                 for (size_t i = 0; i < QUEUE_SIZE; ++i)
                 {
@@ -131,7 +134,7 @@ public:
                         }
                     }
                 }
-    
+
                 if (queue_idx >= 0)
                     break;
                 cv.wait(lock);

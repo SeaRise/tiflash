@@ -13,6 +13,8 @@
 // limitations under the License.
 
 #include <Common/ThreadManager.h>
+#include <Flash/Pipeline/FIFOTaskQueue.h>
+#include <Flash/Pipeline/MultiLevelFeedbackQueue.h>
 #include <Flash/Pipeline/TaskQueue.h>
 #include <TestUtils/TiFlashTestBasic.h>
 #include <gtest/gtest.h>

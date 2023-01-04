@@ -15,39 +15,32 @@
 #pragma once
 
 #include <Common/Logger.h>
-#include <Flash/Pipeline/Task.h>
 #include <Flash/Pipeline/TaskQueue.h>
 
-#include <thread>
-#include <vector>
+#include <deque>
+#include <mutex>
 
 namespace DB
 {
-class TaskScheduler;
-
-class SpillExecutor
+class FIFOTaskQueue : public TaskQueue
 {
 public:
-    SpillExecutor(TaskScheduler & scheduler_, size_t thread_num);
+    void submit(TaskPtr && task) override;
 
-    void close();
+    void submit(std::vector<TaskPtr> & tasks) override;
 
-    void waitForStop();
+    bool take(TaskPtr & task) override;
 
-    void submit(TaskPtr && task);
+    bool empty() override;
 
-private:
-    void loop() noexcept;
-
-    void handleTask(TaskPtr && task);
+    void close() override;
 
 private:
-    TaskQueuePtr task_queue;
+    std::mutex mu;
+    std::condition_variable cv;
+    bool is_closed = false;
+    std::deque<TaskPtr> task_queue;
 
-    LoggerPtr logger = Logger::get("SpillExecutor");
-
-    TaskScheduler & scheduler;
-
-    std::vector<std::thread> threads;
+    LoggerPtr logger = Logger::get("FIFOTaskQueue");
 };
 } // namespace DB

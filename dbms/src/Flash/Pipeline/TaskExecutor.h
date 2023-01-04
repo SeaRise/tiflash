@@ -44,7 +44,7 @@ private:
     void handleTask(TaskPtr & task);
 
 private:
-    TaskQueuePtr task_queue = std::make_unique<FIFOTaskQueue>();
+    TaskQueuePtr task_queue;
 
     LoggerPtr logger = Logger::get("TaskExecutor");
 

@@ -12,42 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
-
-#include <Common/Logger.h>
-#include <Flash/Pipeline/Task.h>
-#include <Flash/Pipeline/TaskQueue.h>
-
-#include <thread>
-#include <vector>
+#include <Flash/Pipeline/MultiLevelFeedbackQueue.h>
+#include <assert.h>
+#include <common/likely.h>
 
 namespace DB
 {
-class TaskScheduler;
-
-class SpillExecutor
+void UnitQueue::take(TaskPtr & task)
 {
-public:
-    SpillExecutor(TaskScheduler & scheduler_, size_t thread_num);
+    assert(!task);
+    assert(!empty());
+    task = std::move(task_queue.front());
+    task_queue.pop_front();
+    assert(task);
+}
 
-    void close();
+bool UnitQueue::empty()
+{
+    return task_queue.empty();
+}
 
-    void waitForStop();
+void UnitQueue::submit(TaskPtr && task)
+{
+    assert(task);
+    task_queue.push_back(std::move(task));
+}
 
-    void submit(TaskPtr && task);
-
-private:
-    void loop() noexcept;
-
-    void handleTask(TaskPtr && task);
-
-private:
-    TaskQueuePtr task_queue;
-
-    LoggerPtr logger = Logger::get("SpillExecutor");
-
-    TaskScheduler & scheduler;
-
-    std::vector<std::thread> threads;
-};
+double UnitQueue::accuTimeAfterDivisor()
+{
+    assert(factor_for_normal > 0);
+    return accu_consume_time / factor_for_normal;
+}
 } // namespace DB

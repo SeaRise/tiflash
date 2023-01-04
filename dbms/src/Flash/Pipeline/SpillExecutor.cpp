@@ -14,6 +14,7 @@
 
 #include <Common/Exception.h>
 #include <Common/setThreadName.h>
+#include <Flash/Pipeline/FIFOTaskQueue.h>
 #include <Flash/Pipeline/SpillExecutor.h>
 #include <Flash/Pipeline/TaskHelper.h>
 #include <Flash/Pipeline/TaskScheduler.h>
@@ -25,7 +26,8 @@
 namespace DB
 {
 SpillExecutor::SpillExecutor(TaskScheduler & scheduler_, size_t thread_num)
-    : scheduler(scheduler_)
+    : task_queue(std::make_unique<FIFOTaskQueue>())
+    , scheduler(scheduler_)
 {
     RUNTIME_CHECK(thread_num > 0);
     threads.reserve(thread_num);
@@ -68,6 +70,7 @@ void SpillExecutor::handleTask(TaskPtr && task)
             static constexpr UInt64 YIELD_MAX_TIME_SPENT = 100'000'000L;
             if (time_spent >= YIELD_MAX_TIME_SPENT)
             {
+                task_queue->updateStatistics(task, time_spent);
                 task->profile_info.addSpillTime(time_spent);
                 submit(std::move(task));
                 return;
@@ -75,10 +78,12 @@ void SpillExecutor::handleTask(TaskPtr && task)
             break;
         }
         case ExecTaskStatus::RUNNING:
+            task_queue->updateStatistics(task, time_spent);
             task->profile_info.addSpillTime(time_spent);
             scheduler.task_executor.submit(std::move(task));
             return;
         case FINISH_STATUS:
+            task_queue->updateStatistics(task, time_spent);
             task->profile_info.addSpillTime(time_spent);
             task.reset();
             return;

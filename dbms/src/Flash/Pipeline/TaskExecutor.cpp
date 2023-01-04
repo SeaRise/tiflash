@@ -14,6 +14,7 @@
 
 #include <Common/Exception.h>
 #include <Common/setThreadName.h>
+#include <Flash/Pipeline/FIFOTaskQueue.h>
 #include <Flash/Pipeline/TaskExecutor.h>
 #include <Flash/Pipeline/TaskHelper.h>
 #include <Flash/Pipeline/TaskScheduler.h>
@@ -23,7 +24,8 @@
 namespace DB
 {
 TaskExecutor::TaskExecutor(TaskScheduler & scheduler_, size_t thread_num)
-    : scheduler(scheduler_)
+    : task_queue(std::make_unique<FIFOTaskQueue>())
+    , scheduler(scheduler_)
 {
     RUNTIME_CHECK(thread_num > 0);
     threads.reserve(thread_num);
@@ -78,6 +80,7 @@ void TaskExecutor::handleTask(TaskPtr & task)
             static constexpr UInt64 YIELD_MAX_TIME_SPENT = 100'000'000L;
             if (time_spent >= YIELD_MAX_TIME_SPENT)
             {
+                task_queue->updateStatistics(task, time_spent);
                 task->profile_info.addExecuteTime(time_spent);
                 submit(std::move(task));
                 return;
@@ -85,14 +88,17 @@ void TaskExecutor::handleTask(TaskPtr & task)
             break;
         }
         case ExecTaskStatus::WAITING:
+            task_queue->updateStatistics(task, time_spent);
             task->profile_info.addExecuteTime(time_spent);
             scheduler.wait_reactor.submit(std::move(task));
             return;
         case ExecTaskStatus::SPILLING:
+            task_queue->updateStatistics(task, time_spent);
             task->profile_info.addExecuteTime(time_spent);
             scheduler.spill_executor.submit(std::move(task));
             return;
         case FINISH_STATUS:
+            task_queue->updateStatistics(task, time_spent);
             task->profile_info.addExecuteTime(time_spent);
             task.reset();
             return;

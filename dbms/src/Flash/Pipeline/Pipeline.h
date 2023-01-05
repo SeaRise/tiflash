@@ -52,7 +52,7 @@ public:
     // only used for test.
     void addGetResultSink(ResultHandler result_handler);
 
-    OperatorPipelineGroups transform(Context & context, size_t concurrency);
+    OperatorPipelineGroup transform(Context & context, size_t concurrency);
 
     Events toEvents(PipelineExecStatus & status, Context & context, size_t concurrency);
 
@@ -60,6 +60,8 @@ public:
 
 private:
     void toSelfString(FmtBuffer & buffer, size_t level) const;
+
+    EventPtr toEvent(PipelineExecStatus & status, Context & context, size_t concurrency, Events & all_events);
 
 private:
     // data flow: plans.begin() <-- plans.end()

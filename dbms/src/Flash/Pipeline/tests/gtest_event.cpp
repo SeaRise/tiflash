@@ -361,6 +361,30 @@ protected:
 private:
     size_t task_num;
 };
+
+class CrashEvent : public Event
+{
+public:
+    explicit CrashEvent(PipelineExecStatus & exec_status_)
+        : Event(exec_status_, nullptr)
+    {}
+
+protected:
+    bool scheduleImpl() override
+    {
+        throw Exception("scheduleImpl");
+    }
+
+    void finishImpl() override
+    {
+        throw Exception("finishImpl");
+    }
+
+    void finalizeFinish() override
+    {
+        throw Exception("finalizeFinish");
+    }
+};
 } // namespace
 
 class EventTestRunner : public ::testing::Test
@@ -574,6 +598,28 @@ try
         wait(exec_status);
         assertNoErr(exec_status);
     }
+}
+CATCH
+
+TEST_F(EventTestRunner, crash)
+try
+{
+    PipelineExecStatus exec_status;
+    std::vector<EventPtr> events;
+    // crash_event <-- run_event should run first,
+    // otherwise the thread pool will be filled up by WaitCancelEvent/WaitCancelTask,
+    // resulting in a period of time before RunEvent/RunTask/CrashEvent will run.
+    auto run_event = std::make_shared<RunEvent>(exec_status, /*with_tasks=*/true);
+    events.push_back(run_event);
+    auto crash_event = std::make_shared<CrashEvent>(exec_status);
+    for (size_t i = 0; i < 100; ++i)
+        events.push_back(std::make_shared<WaitCancelEvent>(exec_status, /*with_tasks=*/true));
+    events.push_back(crash_event);
+    crash_event->addDependency(run_event);
+    schedule(events);
+    wait(exec_status);
+    auto err_msg = exec_status.getErrMsg();
+    ASSERT_TRUE(!err_msg.empty());
 }
 CATCH
 

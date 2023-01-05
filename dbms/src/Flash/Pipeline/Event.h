@@ -46,9 +46,11 @@ public:
 
     void addDependency(const EventPtr & dependency);
 
-    void schedule();
+    // schedule, finishTask and finish maybe called directly in TaskScheduler,
+    // so these functions must be noexcept.
+    void schedule() noexcept;
 
-    void finishTask(const LocalTaskProfileInfo & task_profile_info);
+    void finishTask(const LocalTaskProfileInfo & task_profile_info) noexcept;
 
     bool isNonDependent();
 
@@ -62,8 +64,6 @@ public:
     PipelineExecStatus & getExecStatus() { return exec_status; }
 
 protected:
-    void insertEvent(const EventPtr & replacement);
-
     // Returns true meaning no task is scheduled.
     virtual bool scheduleImpl() { return true; }
 
@@ -74,7 +74,7 @@ protected:
     void scheduleTask(std::vector<TaskPtr> & tasks);
 
 private:
-    void finish();
+    void finish() noexcept;
 
     void addNext(const EventPtr & next);
 

@@ -23,12 +23,13 @@
 
 namespace DB
 {
+struct ExecutorConfig;
 class TaskScheduler;
 
 class TaskExecutor
 {
 public:
-    TaskExecutor(TaskScheduler & scheduler_, size_t thread_num);
+    TaskExecutor(TaskScheduler & scheduler_, const ExecutorConfig & config);
 
     void close();
 

@@ -20,9 +20,9 @@
 namespace DB
 {
 TaskScheduler::TaskScheduler(const TaskSchedulerConfig & config)
-    : task_executor(*this, config.task_executor_thread_num)
+    : task_executor(*this, config.task_executor_config)
     , wait_reactor(*this)
-    , spill_executor(*this, config.spill_executor_thread_num)
+    , spill_executor(*this, config.spill_executor_config)
 {
 }
 

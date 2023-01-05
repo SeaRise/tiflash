@@ -400,7 +400,7 @@ protected:
 
     void SetUp() override
     {
-        TaskSchedulerConfig config{thread_num, thread_num};
+        TaskSchedulerConfig config{{thread_num}, {thread_num}};
         assert(!TaskScheduler::instance);
         TaskScheduler::instance = std::make_unique<TaskScheduler>(config);
     }

@@ -35,6 +35,8 @@ public:
 
     void close() override;
 
+    TaskQueueType getType() const override { return TaskQueueType::FIFO; }
+
 private:
     std::mutex mu;
     std::condition_variable cv;

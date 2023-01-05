@@ -40,7 +40,158 @@ void UnitQueue::submit(TaskPtr && task)
 
 double UnitQueue::accuTimeAfterDivisor()
 {
-    assert(factor_for_normal > 0);
-    return accu_consume_time / factor_for_normal;
+    return accu_consume_time / info.factor_for_normal;
 }
+
+template <typename TimeGetter>
+MultiLevelFeedbackQueue<TimeGetter>::MultiLevelFeedbackQueue()
+{
+    UInt64 time_slices[QUEUE_SIZE];
+    UInt64 time_slice = 0;
+    for (size_t i = 0; i < QUEUE_SIZE; ++i)
+    {
+        time_slice += LEVEL_TIME_SLICE_BASE_NS * (i + 1);
+        time_slices[i] = time_slice;
+    }
+
+    double factors[QUEUE_SIZE];
+    double factor = 1;
+    for (int i = QUEUE_SIZE - 1; i >= 0; --i)
+    {
+        // initialize factor for every unit queue,
+        // Higher priority queues have more execution time,
+        // so they have a larger factor.
+        factors[i] = factor;
+        factor *= RATIO_OF_ADJACENT_QUEUE;
+    }
+
+    for (size_t i = 0; i < QUEUE_SIZE; ++i)
+        level_queues[i] = std::make_unique<UnitQueue>(time_slices[i], factors[i]);
+}
+
+template <typename TimeGetter>
+void MultiLevelFeedbackQueue<TimeGetter>::computeQueueLevel(const TaskPtr & task)
+{
+    auto time_spent = TimeGetter::get(task);
+    // level will only increment.
+    for (size_t i = task->mlfq_level; i < QUEUE_SIZE; ++i)
+    {
+        if (time_spent < getUnitQueueInfo(i).time_slice)
+        {
+            task->mlfq_level = i;
+            return;
+        }
+    }
+    task->mlfq_level = QUEUE_SIZE - 1;
+}
+
+template <typename TimeGetter>
+void MultiLevelFeedbackQueue<TimeGetter>::submit(TaskPtr && task)
+{
+    assert(task);
+    computeQueueLevel(task);
+    {
+        std::lock_guard lock(mu);
+        level_queues[task->mlfq_level]->submit(std::move(task));
+    }
+    assert(!task);
+    cv.notify_one();
+}
+
+template <typename TimeGetter>
+void MultiLevelFeedbackQueue<TimeGetter>::submit(std::vector<TaskPtr> & tasks)
+{
+    if (tasks.empty())
+        return;
+
+    for (auto & task : tasks)
+        computeQueueLevel(task);
+
+    std::lock_guard lock(mu);
+    for (auto & task : tasks)
+    {
+        level_queues[task->mlfq_level]->submit(std::move(task));
+        cv.notify_one();
+    }
+}
+
+template <typename TimeGetter>
+bool MultiLevelFeedbackQueue<TimeGetter>::take(TaskPtr & task)
+{
+    assert(!task);
+    {
+        // -1 means no candidates; else has candidate.
+        int queue_idx = -1;
+        double target_accu_time = 0;
+        std::unique_lock lock(mu);
+        while (true)
+        {
+            if (unlikely(is_closed))
+                return false;
+
+            // Find the queue with the smallest execution time.
+            for (size_t i = 0; i < QUEUE_SIZE; ++i)
+            {
+                // we just search for queue has element
+                const auto & cur_queue = level_queues[i];
+                if (!cur_queue->empty())
+                {
+                    double local_target_time = cur_queue->accuTimeAfterDivisor();
+                    if (queue_idx < 0 || local_target_time < target_accu_time)
+                    {
+                        target_accu_time = local_target_time;
+                        queue_idx = i;
+                    }
+                }
+            }
+
+            if (queue_idx >= 0)
+                break;
+            cv.wait(lock);
+        }
+        level_queues[queue_idx]->take(task);
+    }
+
+    assert(task);
+    return true;
+}
+
+template <typename TimeGetter>
+void MultiLevelFeedbackQueue<TimeGetter>::updateStatistics(const TaskPtr & task, size_t value)
+{
+    assert(task);
+    level_queues[task->mlfq_level]->accu_consume_time += value;
+}
+
+template <typename TimeGetter>
+bool MultiLevelFeedbackQueue<TimeGetter>::empty()
+{
+    std::lock_guard lock(mu);
+    for (const auto & queue : level_queues)
+    {
+        if (!queue->empty())
+            return false;
+    }
+    return true;
+}
+
+template <typename TimeGetter>
+void MultiLevelFeedbackQueue<TimeGetter>::close()
+{
+    {
+        std::lock_guard lock(mu);
+        is_closed = true;
+    }
+    cv.notify_all();
+}
+
+template <typename TimeGetter>
+const UnitQueueInfo & MultiLevelFeedbackQueue<TimeGetter>::getUnitQueueInfo(size_t level)
+{
+    assert(level < QUEUE_SIZE);
+    return level_queues[level]->info;
+}
+
+template class MultiLevelFeedbackQueue<ExecuteTimeGetter>;
+template class MultiLevelFeedbackQueue<SpillTimeGetter>;
 } // namespace DB

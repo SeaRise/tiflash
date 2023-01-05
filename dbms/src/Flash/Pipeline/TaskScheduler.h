@@ -18,14 +18,20 @@
 #include <Flash/Pipeline/SpillExecutor.h>
 #include <Flash/Pipeline/Task.h>
 #include <Flash/Pipeline/TaskExecutor.h>
+#include <Flash/Pipeline/TaskQueueType.h>
 #include <Flash/Pipeline/WaitReactor.h>
 
 namespace DB
 {
+struct ExecutorConfig
+{
+    size_t thread_num;
+    TaskQueueType queue_type = TaskQueueType::MLFQ;
+};
 struct TaskSchedulerConfig
 {
-    size_t task_executor_thread_num;
-    size_t spill_executor_thread_num;
+    ExecutorConfig task_executor_config;
+    ExecutorConfig spill_executor_config;
 };
 
 /**

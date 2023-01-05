@@ -15,6 +15,7 @@
 #include <Common/Exception.h>
 #include <Common/setThreadName.h>
 #include <Flash/Pipeline/FIFOTaskQueue.h>
+#include <Flash/Pipeline/MultiLevelFeedbackQueue.h>
 #include <Flash/Pipeline/TaskExecutor.h>
 #include <Flash/Pipeline/TaskHelper.h>
 #include <Flash/Pipeline/TaskScheduler.h>
@@ -23,10 +24,22 @@
 
 namespace DB
 {
-TaskExecutor::TaskExecutor(TaskScheduler & scheduler_, size_t thread_num)
-    : task_queue(std::make_unique<FIFOTaskQueue>())
-    , scheduler(scheduler_)
+TaskExecutor::TaskExecutor(TaskScheduler & scheduler_, const ExecutorConfig & config)
+    : scheduler(scheduler_)
 {
+    switch (config.queue_type)
+    {
+    case TaskQueueType::MLFQ:
+        task_queue = std::make_unique<ExecuteMultiLevelFeedbackQueue>();
+        break;
+    case TaskQueueType::FIFO:
+        task_queue = std::make_unique<FIFOTaskQueue>();
+        break;
+    default:
+        throw Exception("unsupport task queue type");
+    }
+
+    auto thread_num = config.thread_num;
     RUNTIME_CHECK(thread_num > 0);
     threads.reserve(thread_num);
     for (size_t i = 0; i < thread_num; ++i)

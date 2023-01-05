@@ -74,6 +74,9 @@ public:
 public:
     LocalTaskProfileInfo profile_info;
 
+    // level of multi-level feedback queue.
+    size_t mlfq_level{0};
+
 protected:
     virtual ExecTaskStatus executeImpl() = 0;
     virtual ExecTaskStatus awaitImpl() { return ExecTaskStatus::RUNNING; }

@@ -288,7 +288,7 @@ public:
 
     void submitAndWait(std::vector<TaskPtr> & tasks, Waiter & waiter)
     {
-        TaskSchedulerConfig config{thread_num, thread_num};
+        TaskSchedulerConfig config{{thread_num}, {thread_num}};
         TaskScheduler task_scheduler{config};
         task_scheduler.submit(tasks);
         waiter.wait();
@@ -358,7 +358,7 @@ TEST_F(TaskSchedulerTestRunner, shutdown)
 try
 {
     auto do_test = [](size_t task_executor_thread_num, size_t spill_executor_thread_num, size_t task_num) {
-        TaskSchedulerConfig config{task_executor_thread_num, spill_executor_thread_num};
+        TaskSchedulerConfig config{{task_executor_thread_num}, {spill_executor_thread_num}};
         TaskScheduler task_scheduler{config};
         std::vector<TaskPtr> tasks;
         for (size_t i = 0; i < task_num; ++i)

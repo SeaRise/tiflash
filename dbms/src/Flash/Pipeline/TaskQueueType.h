@@ -14,41 +14,11 @@
 
 #pragma once
 
-#include <Common/Logger.h>
-#include <Flash/Pipeline/Task.h>
-#include <Flash/Pipeline/TaskQueue.h>
-
-#include <thread>
-#include <vector>
-
 namespace DB
 {
-struct ExecutorConfig;
-class TaskScheduler;
-
-class SpillExecutor
+enum class TaskQueueType
 {
-public:
-    SpillExecutor(TaskScheduler & scheduler_, const ExecutorConfig & config);
-
-    void close();
-
-    void waitForStop();
-
-    void submit(TaskPtr && task);
-
-private:
-    void loop() noexcept;
-
-    void handleTask(TaskPtr && task);
-
-private:
-    TaskQueuePtr task_queue;
-
-    LoggerPtr logger = Logger::get("SpillExecutor");
-
-    TaskScheduler & scheduler;
-
-    std::vector<std::thread> threads;
+    FIFO, // first in, first out
+    MLFQ, // multi-level feedback queue
 };
 } // namespace DB

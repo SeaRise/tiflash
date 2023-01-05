@@ -15,6 +15,7 @@
 #pragma once
 
 #include <Flash/Pipeline/Task.h>
+#include <Flash/Pipeline/TaskQueueType.h>
 
 #include <memory>
 #include <vector>
@@ -41,10 +42,11 @@ public:
     virtual bool empty() = 0;
 
     virtual void close() = 0;
+
+    virtual TaskQueueType getType() const = 0;
 };
 
 // TODO support more kind of TaskQueue, such as
-// - multi-level feedback queue
 // - resource group queue
 
 } // namespace DB

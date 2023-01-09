@@ -157,10 +157,10 @@ bool MultiLevelFeedbackQueue<TimeGetter>::take(TaskPtr & task)
 }
 
 template <typename TimeGetter>
-void MultiLevelFeedbackQueue<TimeGetter>::updateStatistics(const TaskPtr & task, size_t value)
+void MultiLevelFeedbackQueue<TimeGetter>::updateStatistics(const TaskPtr & task, size_t inc_value)
 {
     assert(task);
-    level_queues[task->mlfq_level]->accu_consume_time += value;
+    level_queues[task->mlfq_level]->accu_consume_time += inc_value;
 }
 
 template <typename TimeGetter>

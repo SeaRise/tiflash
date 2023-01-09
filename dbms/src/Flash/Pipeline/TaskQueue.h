@@ -37,7 +37,9 @@ public:
     // return false if the queue had been closed.
     virtual bool take(TaskPtr & task) = 0;
 
-    virtual void updateStatistics(const TaskPtr & /*task*/, size_t /*value*/) {}
+    // Update the execution metrics of the task taken from the queue.
+    // Used to adjust the priority of tasks within a queue.
+    virtual void updateStatistics(const TaskPtr & /*task*/, size_t /*inc_value*/) {}
 
     virtual bool empty() = 0;
 
@@ -45,8 +47,4 @@ public:
 
     virtual TaskQueueType getType() const = 0;
 };
-
-// TODO support more kind of TaskQueue, such as
-// - resource group queue
-
 } // namespace DB

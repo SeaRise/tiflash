@@ -76,7 +76,7 @@ public:
 
     bool take(TaskPtr & task) override;
 
-    void updateStatistics(const TaskPtr & task, size_t value) override;
+    void updateStatistics(const TaskPtr & task, size_t inc_value) override;
 
     bool empty() override;
 

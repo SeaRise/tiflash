@@ -16,6 +16,7 @@
 
 namespace DB
 {
+// TODO support resource group queue.
 enum class TaskQueueType
 {
     FIFO, // first in, first out

@@ -58,9 +58,9 @@ MultiLevelFeedbackQueue<TimeGetter>::MultiLevelFeedbackQueue()
     double factor = 1;
     for (int i = QUEUE_SIZE - 1; i >= 0; --i)
     {
-        // initialize factor for every unit queue,
+        // Initialize factor for every unit queue.
         // Higher priority queues have more execution time,
-        // so they have a larger factor.
+        // so they should have a larger factor.
         factors[i] = factor;
         factor *= RATIO_OF_ADJACENT_QUEUE;
     }

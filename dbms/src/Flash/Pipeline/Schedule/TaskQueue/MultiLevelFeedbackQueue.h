@@ -90,7 +90,7 @@ public:
     static constexpr size_t QUEUE_SIZE = 8;
 
     // The time slice of the i-th level is (i+1)*LEVEL_TIME_SLICE_BASE ns,
-    // so when a driver's execution time exceeds 0.2s, 0.6s, 1.2s, 2s, 3s, 4.2s, 5.6s, and 7.2s,
+    // so when a task's execution time exceeds 0.2s, 0.6s, 1.2s, 2s, 3s, 4.2s, 5.6s, and 7.2s,
     // it will move to next level.
     static constexpr int64_t LEVEL_TIME_SLICE_BASE_NS = 200'000'000L;
 
@@ -106,6 +106,7 @@ private:
 
     LoggerPtr logger = Logger::get("MultiLevelFeedbackQueue");
 
+    // from high level to low level.
     std::array<UnitQueuePtr, QUEUE_SIZE> level_queues;
 };
 

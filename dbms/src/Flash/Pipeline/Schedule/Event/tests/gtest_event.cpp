@@ -33,7 +33,7 @@ public:
 
     ~BaseTask()
     {
-        event->finishTask(profile_info);
+        event->onTaskFinish(profile_info);
         event.reset();
     }
 
@@ -68,11 +68,11 @@ protected:
         std::vector<TaskPtr> tasks;
         for (size_t i = 0; i < task_num; ++i)
             tasks.push_back(std::make_unique<BaseTask>(shared_from_this(), counter));
-        scheduleTask(tasks);
+        scheduleTasks(tasks);
         return false;
     }
 
-    void finalizeFinish() override
+    void finishImpl() override
     {
         --counter;
     }
@@ -91,7 +91,7 @@ public:
 
     ~RunTask()
     {
-        event->finishTask(profile_info);
+        event->onTaskFinish(profile_info);
         event.reset();
     }
 
@@ -128,7 +128,7 @@ protected:
         std::vector<TaskPtr> tasks;
         for (size_t i = 0; i < 10; ++i)
             tasks.push_back(std::make_unique<RunTask>(shared_from_this()));
-        scheduleTask(tasks);
+        scheduleTasks(tasks);
         return false;
     }
 
@@ -146,7 +146,7 @@ public:
 
     ~WaitCancelTask()
     {
-        event->finishTask(profile_info);
+        event->onTaskFinish(profile_info);
         event.reset();
     }
 
@@ -189,7 +189,7 @@ protected:
         std::vector<TaskPtr> tasks;
         for (size_t i = 0; i < 10; ++i)
             tasks.push_back(std::make_unique<WaitCancelTask>(shared_from_this()));
-        scheduleTask(tasks);
+        scheduleTasks(tasks);
         return false;
     }
 
@@ -231,11 +231,6 @@ protected:
     }
 
     void finishImpl() override
-    {
-        assert(mem_tracker.get() == current_memory_tracker);
-    }
-
-    void finalizeFinish() override
     {
         assert(mem_tracker.get() == current_memory_tracker);
     }
@@ -379,11 +374,6 @@ protected:
     {
         throw Exception("finishImpl");
     }
-
-    void finalizeFinish() override
-    {
-        throw Exception("finalizeFinish");
-    }
 };
 } // namespace
 
@@ -440,7 +430,7 @@ TEST_F(EventTestRunner, base)
 try
 {
     auto do_test = [&](size_t group_num, size_t event_num) {
-        // group_num * (event_num * (`BaseEvent::finalizeFinish + BaseEvent::task_num * ~BaseTask()`))
+        // group_num * (event_num * (`BaseEvent::finishImpl + BaseEvent::task_num * ~BaseTask()`))
         std::atomic_int64_t counter{static_cast<int64_t>(group_num * (event_num * (1 + BaseEvent::task_num)))};
         PipelineExecutorStatus exec_status;
         {

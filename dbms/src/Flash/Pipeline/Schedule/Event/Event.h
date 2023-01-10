@@ -46,11 +46,11 @@ public:
 
     void addDependency(const EventPtr & dependency);
 
-    // schedule, finishTask and finish maybe called directly in TaskScheduler,
+    // schedule, onTaskFinish and finish maybe called directly in TaskScheduler,
     // so these functions must be noexcept.
     void schedule() noexcept;
 
-    void finishTask(const LocalTaskProfileInfo & task_profile_info) noexcept;
+    void onTaskFinish(const LocalTaskProfileInfo & task_profile_info) noexcept;
 
     bool isNonDependent();
 
@@ -67,18 +67,17 @@ protected:
     // Returns true meaning no task is scheduled.
     virtual bool scheduleImpl() { return true; }
 
+    // Release all resources held at `finishImpl`.
     virtual void finishImpl() {}
 
-    virtual void finalizeFinish() {}
-
-    void scheduleTask(std::vector<TaskPtr> & tasks);
+    void scheduleTasks(std::vector<TaskPtr> & tasks);
 
 private:
     void finish() noexcept;
 
-    void addNext(const EventPtr & next);
+    void addDependent(const EventPtr & dependent);
 
-    void completeDependency();
+    void onDependencyComplete();
 
     void switchStatus(EventStatus from, EventStatus to);
 
@@ -88,7 +87,7 @@ protected:
     MemoryTrackerPtr mem_tracker;
 
 private:
-    std::vector<EventPtr> next_events;
+    Events dependents;
 
     std::atomic_int32_t unfinished_dependencies{0};
 

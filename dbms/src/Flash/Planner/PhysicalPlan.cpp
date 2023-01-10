@@ -17,6 +17,7 @@
 #include <Flash/Coprocessor/DAGContext.h>
 #include <Flash/Coprocessor/FineGrainedShuffle.h>
 #include <Flash/Pipeline/Pipeline.h>
+#include <Flash/Pipeline/PipelineBuildState.h>
 #include <Flash/Planner/ExecutorIdGenerator.h>
 #include <Flash/Planner/PhysicalPlan.h>
 #include <Flash/Planner/PhysicalPlanVisitor.h>
@@ -150,7 +151,10 @@ void PhysicalPlan::build(const String & executor_id, const tipb::Executor * exec
     {
         GET_METRIC(tiflash_coprocessor_executor_count, type_exchange_receiver).Increment();
         if (unlikely(context.isExecutorTest() || context.isInterpreterTest()))
-            pushBack(PhysicalMockExchangeReceiver::build(context, executor_id, log, executor->exchange_receiver()));
+        {
+            size_t fine_grained_stream_count = executor->has_fine_grained_shuffle_stream_count() ? executor->fine_grained_shuffle_stream_count() : 0;
+            pushBack(PhysicalMockExchangeReceiver::build(context, executor_id, log, executor->exchange_receiver(), fine_grained_stream_count));
+        }
         else
         {
             // for MPP test, we can use real exchangeReceiver to run an query across different compute nodes
@@ -291,11 +295,11 @@ void PhysicalPlan::buildBlockInputStream(DAGPipeline & pipeline, Context & conte
 Pipelines PhysicalPlan::toPipelines()
 {
     assert(root_node);
-    PipelineBuilder builder;
-    auto root_pipeline = builder.addPipeline();
-    root_node->buildPipeline(builder, root_pipeline);
+    PipelineBuildState state;
+    auto root_pipeline = state.addPipeline();
+    root_node->buildPipelines(root_pipeline, state);
     root_node.reset();
-    auto result = builder.build();
+    auto result = state.build();
     auto to_string = [&]() -> String {
         if (result.empty())
             return "";

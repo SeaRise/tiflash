@@ -22,11 +22,11 @@ namespace DB
 PipelineExecutor::PipelineExecutor(
     const ProcessListEntryPtr & process_list_entry_,
     Context & context_,
-    const Pipelines & pipelines_,
+    Pipelines && pipelines_,
     const String & req_id)
     : QueryExecutor(process_list_entry_)
     , context(context_)
-    , pipelines(pipelines_)
+    , pipelines(std::move(pipelines_))
     , log(Logger::get(req_id))
 {
     assert(!pipelines.empty());

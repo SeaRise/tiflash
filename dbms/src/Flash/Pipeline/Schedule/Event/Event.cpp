@@ -30,7 +30,7 @@ namespace DB
 void Event::addDependency(const EventPtr & dependency)
 {
     assert(status == EventStatus::INIT);
-    dependency->addNext(shared_from_this());
+    dependency->addDependent(shared_from_this());
     ++unfinished_dependencies;
 }
 
@@ -40,13 +40,13 @@ bool Event::isNonDependent()
     return 0 == unfinished_dependencies;
 }
 
-void Event::addNext(const EventPtr & next)
+void Event::addDependent(const EventPtr & dependent)
 {
     assert(status == EventStatus::INIT);
-    next_events.push_back(next);
+    dependents.push_back(dependent);
 }
 
-void Event::completeDependency()
+void Event::onDependencyComplete()
 {
     auto cur_value = unfinished_dependencies.fetch_sub(1);
     assert(cur_value >= 1);
@@ -57,7 +57,7 @@ void Event::completeDependency()
 void Event::schedule() noexcept
 {
     switchStatus(EventStatus::INIT, EventStatus::SCHEDULED);
-    exec_status.addActiveEvent();
+    exec_status.onEventStart();
     MemoryTrackerSetter setter{true, mem_tracker.get()};
     // if err throw here, we should call finish directly.
     bool direct_finish = true;
@@ -80,30 +80,28 @@ void Event::finish() noexcept
         finishImpl();
     }
     CATCH
-    // If query has already been cancelled, it will not trigger the next events.
+    // If query has already been cancelled, it will not trigger dependents.
     if (likely(!isCancelled()))
     {
-        // finished processing the event, now we can schedule events that depend on this event
-        for (auto & next_event : next_events)
+        // finished processing the event, now we can schedule events that depend on this event.
+        for (auto & dependent : dependents)
         {
-            next_event->completeDependency();
-            next_event.reset();
+            assert(dependent);
+            dependent->onDependencyComplete();
+            dependent.reset();
         }
     }
-    next_events.clear();
-    try
-    {
-        finalizeFinish();
-    }
-    CATCH
+    // Release all dependents, so that the event that did not call `finishImpl`
+    // because of `isCancelled()` will be destructured before the end of `exec_status.wait`.
+    dependents.clear();
     // In order to ensure that `exec_status.wait()` doesn't finish when there is an active event,
-    // we have to call `exec_status.completeEvent()` here,
-    // since `exec_status.addActiveEvent()` will have been called by the next events.
+    // we have to call `exec_status.onEventFinish()` here,
+    // since `exec_status.onEventStart()` will have been called by dependents.
     // The call order will be `eventA++ ───► eventB++ ───► eventA-- ───► eventB-- ───► exec_status.await finished`.
-    exec_status.completeEvent();
+    exec_status.onEventFinish();
 }
 
-void Event::scheduleTask(std::vector<TaskPtr> & tasks)
+void Event::scheduleTasks(std::vector<TaskPtr> & tasks)
 {
     assert(!tasks.empty());
     assert(0 == unfinished_tasks);
@@ -112,7 +110,7 @@ void Event::scheduleTask(std::vector<TaskPtr> & tasks)
     TaskScheduler::instance->submit(tasks);
 }
 
-void Event::finishTask(const LocalTaskProfileInfo & task_profile_info) noexcept
+void Event::onTaskFinish(const LocalTaskProfileInfo & task_profile_info) noexcept
 {
     assert(status != EventStatus::FINISHED);
     exec_status.update(task_profile_info);

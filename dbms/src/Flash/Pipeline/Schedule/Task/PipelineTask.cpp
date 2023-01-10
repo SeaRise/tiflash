@@ -35,7 +35,7 @@ PipelineTask::~PipelineTask()
 {
     pipeline_exec.reset();
     assert(event);
-    event->finishTask(profile_info);
+    event->onTaskFinish(profile_info);
     event.reset();
 }
 

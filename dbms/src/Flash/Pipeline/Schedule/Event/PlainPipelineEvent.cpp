@@ -21,7 +21,7 @@ namespace DB
 bool PlainPipelineEvent::scheduleImpl()
 {
     assert(pipeline);
-    auto pipline_exec_group = pipeline->toExec(context, concurrency);
+    auto pipline_exec_group = pipeline->toExecGroup(context, concurrency);
     pipeline.reset();
 
     if (pipline_exec_group.empty())

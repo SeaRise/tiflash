@@ -12,32 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
-
-#include <Common/Logger.h>
-#include <Operators/Operator.h>
+#include <Interpreters/ExpressionActions.h>
+#include <Operators/ExpressionTransformOp.h>
 
 namespace DB
 {
-struct GlobalLimitTransformAction;
-using GlobalLimitPtr = std::shared_ptr<GlobalLimitTransformAction>;
-
-class LimitTransform : public TransformOp
+OperatorStatus ExpressionTransformOp::transform(Block & block)
 {
-public:
-    explicit LimitTransform(
-        const GlobalLimitPtr & action_,
-        const String & req_id)
-        : action(action_)
-        , log(Logger::get(req_id))
-    {}
-
-    OperatorStatus transform(Block & block) override;
-
-    void transformHeader(Block & header) override;
-
-private:
-    GlobalLimitPtr action;
-    const LoggerPtr log;
-};
+    if (likely(block))
+        expression->execute(block);
+    return OperatorStatus::PASS;
+}
 } // namespace DB

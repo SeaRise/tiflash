@@ -12,34 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <DataStreams/IBlockInputStream.h>
-#include <Operators/BlockInputStreamSource.h>
+#include <Operators/FilterTransformOp.h>
 
 namespace DB
 {
-BlockInputStreamSource::BlockInputStreamSource(
-    const BlockInputStreamPtr & impl_)
-    : impl(impl_)
+OperatorStatus FilterTransformOp::transform(Block & block)
 {
-    impl->readPrefix();
-}
-
-OperatorStatus BlockInputStreamSource::read(Block & block)
-{
-    if (unlikely(finished))
-        return OperatorStatus::PASS;
-
-    block = impl->read();
-    if (unlikely(!block))
+    if (unlikely(filter_transform_action.alwaysFalse()))
     {
-        impl->readSuffix();
-        finished = true;
+        block = {};
+        return OperatorStatus::PASS;
     }
+
+    if (likely(block))
+        return filter_transform_action.transform(block, /*child_filter=*/nullptr)
+            ? OperatorStatus::PASS
+            : OperatorStatus::MORE_INPUT;
+
     return OperatorStatus::PASS;
 }
 
-Block BlockInputStreamSource::readHeader()
+void FilterTransformOp::transformHeader(Block & header)
 {
-    return impl->getHeader();
+    header = filter_transform_action.getHeader();
 }
 } // namespace DB

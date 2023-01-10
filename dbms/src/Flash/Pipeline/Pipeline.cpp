@@ -73,7 +73,7 @@ void Pipeline::addGetResultSink(ResultHandler result_handler)
     get_result_sink->detach();
 }
 
-PipelineExecGroup Pipeline::toExec(Context & context, size_t concurrency)
+PipelineExecGroup Pipeline::toExecGroup(Context & context, size_t concurrency)
 {
     assert(!plan_nodes.empty());
     PipelineExecGroupBuilder builder;

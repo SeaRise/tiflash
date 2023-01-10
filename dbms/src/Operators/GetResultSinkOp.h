@@ -12,15 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <Interpreters/ExpressionActions.h>
-#include <Operators/ExpressionTransform.h>
+#pragma once
+
+#include <Flash/Executor/ResultHandler.h>
+#include <Operators/Operator.h>
 
 namespace DB
 {
-OperatorStatus ExpressionTransform::transform(Block & block)
+class PhysicalGetResultSink;
+class GetResultSinkOp : public SinkOp
 {
-    if (likely(block))
-        expression->execute(block);
-    return OperatorStatus::PASS;
-}
+public:
+    explicit GetResultSinkOp(PhysicalGetResultSink & physical_sink_)
+        : physical_sink(physical_sink_)
+    {
+    }
+
+    OperatorStatus write(Block && block) override;
+
+private:
+    PhysicalGetResultSink & physical_sink;
+};
 } // namespace DB

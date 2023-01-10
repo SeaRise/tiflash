@@ -12,20 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <DataStreams/LimitTransformAction.h>
-#include <Operators/LimitTransform.h>
+#pragma once
+
+#include <Common/Logger.h>
+#include <Operators/Operator.h>
 
 namespace DB
 {
-OperatorStatus LimitTransform::transform(Block & block)
-{
-    if (!action->transform(block))
-        block = {};
-    return OperatorStatus::PASS;
-}
+class IBlockInputStream;
+using BlockInputStreamPtr = std::shared_ptr<IBlockInputStream>;
 
-void LimitTransform::transformHeader(Block & header)
+// wrap for BlockInputStream
+class BlockInputStreamSourceOp : public SourceOp
 {
-    header = action->getHeader();
-}
+public:
+    explicit BlockInputStreamSourceOp(const BlockInputStreamPtr & impl_);
+
+    OperatorStatus read(Block & block) override;
+
+    Block readHeader() override;
+
+private:
+    BlockInputStreamPtr impl;
+    bool finished = false;
+};
 } // namespace DB

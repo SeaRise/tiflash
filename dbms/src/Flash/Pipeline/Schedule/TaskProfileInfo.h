@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include <Common/FmtUtils.h>
 #include <Common/Stopwatch.h>
 
 #include <atomic>

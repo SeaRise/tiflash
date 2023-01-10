@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
-
 #include <Common/FmtUtils.h>
 #include <Flash/Pipeline/Schedule/TaskProfileInfo.h>
 
@@ -21,7 +19,7 @@ namespace DB
 {
 namespace
 {
-template<typename ProfileInfo>
+template <typename ProfileInfo>
 String profileInfoToJson(const ProfileInfo & profile_info)
 {
     return fmt::format(
@@ -32,59 +30,59 @@ String profileInfoToJson(const ProfileInfo & profile_info)
         profile_info.spill_pending_time,
         profile_info.await_time);
 }
+} // namespace
+
+void LocalTaskProfileInfo::startTimer()
+{
+    stopwatch.start();
 }
 
-    void LocalTaskProfileInfo::startTimer()
-    {
-        stopwatch.start();
-    }
+UInt64 LocalTaskProfileInfo::elapsedFromPrev()
+{
+    return stopwatch.elapsedFromLastTime();
+}
 
-    UInt64 LocalTaskProfileInfo::elapsedFromPrev()
-    {
-        return stopwatch.elapsedFromLastTime();
-    }
+void LocalTaskProfileInfo::addExecuteTime(UInt64 value)
+{
+    execute_time += value;
+}
 
-    void LocalTaskProfileInfo::addExecuteTime(UInt64 value)
-    {
-        execute_time += value;
-    }
+void LocalTaskProfileInfo::addExecutePendingTime()
+{
+    execute_pending_time += elapsedFromPrev();
+}
 
-    void LocalTaskProfileInfo::addExecutePendingTime()
-    {
-        execute_pending_time += elapsedFromPrev();
-    }
+void LocalTaskProfileInfo::addSpillTime(UInt64 value)
+{
+    spill_time += value;
+}
 
-    void LocalTaskProfileInfo::addSpillTime(UInt64 value)
-    {
-        spill_time += value;
-    }
+void LocalTaskProfileInfo::addSpillPendingTime()
+{
+    spill_pending_time += elapsedFromPrev();
+}
 
-    void LocalTaskProfileInfo::addSpillPendingTime()
-    {
-        spill_pending_time += elapsedFromPrev();
-    }
+void LocalTaskProfileInfo::addAwaitTime()
+{
+    await_time += elapsedFromPrev();
+}
 
-    void LocalTaskProfileInfo::addAwaitTime()
-    {
-        await_time += elapsedFromPrev();
-    }
+String LocalTaskProfileInfo::toJson() const
+{
+    return profileInfoToJson(*this);
+}
 
-    String LocalTaskProfileInfo::toJson() const
-    {
-        return profileInfoToJson(*this);
-    }
+void GlobalTaskProfileInfo::merge(const LocalTaskProfileInfo & local_one)
+{
+    execute_time += local_one.execute_time;
+    execute_pending_time += local_one.execute_pending_time;
+    spill_time += local_one.spill_time;
+    spill_pending_time += local_one.spill_pending_time;
+    await_time += local_one.await_time;
+}
 
-    void GlobalTaskProfileInfo::merge(const LocalTaskProfileInfo & local_one)
-    {
-        execute_time += local_one.execute_time;
-        execute_pending_time += local_one.execute_pending_time;
-        spill_time += local_one.spill_time;
-        spill_pending_time += local_one.spill_pending_time;
-        await_time += local_one.await_time;
-    }
-
-    String GlobalTaskProfileInfo::toJson() const
-    {
-        return profileInfoToJson(*this);
-    }
+String GlobalTaskProfileInfo::toJson() const
+{
+    return profileInfoToJson(*this);
+}
 } // namespace DB

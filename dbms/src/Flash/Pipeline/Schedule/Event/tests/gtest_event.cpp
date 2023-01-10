@@ -255,7 +255,7 @@ public:
 
     ~TestPorfileTask()
     {
-        event->finishTask(profile_info);
+        event->onTaskFinish(profile_info);
         event.reset();
     }
 
@@ -324,7 +324,7 @@ protected:
         std::vector<TaskPtr> tasks;
         for (size_t i = 0; i < task_num; ++i)
             tasks.push_back(std::make_unique<TestPorfileTask>(shared_from_this()));
-        scheduleTask(tasks);
+        scheduleTasks(tasks);
         return false;
     }
 };
@@ -349,7 +349,7 @@ protected:
         std::vector<TaskPtr> tasks;
         for (size_t i = 0; i < task_num; ++i)
             tasks.push_back(std::make_unique<RunTask>(shared_from_this()));
-        scheduleTask(tasks);
+        scheduleTasks(tasks);
         return false;
     }
 

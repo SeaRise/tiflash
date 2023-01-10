@@ -27,6 +27,8 @@
 #include <Poco/String.h>
 #include <Poco/Timespan.h>
 
+#include <magic_enum.hpp>
+
 namespace DB
 {
 namespace ErrorCodes
@@ -918,23 +920,14 @@ public:
 
     static TaskQueueType getTaskQueueType(const String & s)
     {
-        String lower_str = Poco::toLower(s);
-        if (lower_str == "fifo")
-            return TaskQueueType::FIFO;
-        if (lower_str == "mlfq")
-            return TaskQueueType::MLFQ;
-
-        throw Exception("Unknown task queue type: '" + s + "', must be one of 'fifo', 'mlfq'", ErrorCodes::INVALID_CONFIG_PARAMETER);
+        auto value = magic_enum::enum_cast<TaskQueueType>(Poco::toUpper(s));
+        RUNTIME_CHECK_MSG(value, "Unknown task queue type: '{}'", s);
+        return *value;
     }
 
     String toString() const
     {
-        const char * strings[] = {nullptr, "fifo", "mlfq"};
-
-        if (value < TaskQueueType::FIFO || value > TaskQueueType::MLFQ)
-            throw Exception("Unknown task queue type", ErrorCodes::INVALID_CONFIG_PARAMETER);
-
-        return strings[static_cast<size_t>(value)];
+        return String(magic_enum::enum_name(value));
     }
 
     void set(TaskQueueType x)

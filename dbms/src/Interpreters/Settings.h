@@ -112,7 +112,7 @@ struct Settings
     M(SettingUInt64, optimize_min_equality_disjunction_chain_length, 3, "The minimum length of the expression `expr = x1 OR ... expr = xN` for optimization ")                                                                          \
                                                                                                                                                                                                                                         \
     M(SettingUInt64, min_bytes_to_use_direct_io, 0, "The minimum number of bytes for input/output operations is bypassing the page cache. 0 - disabled.")                                                                               \
-    M(SettingUInt64, mark_cache_min_lifetime, 0, "Deprecated setting. Do not affect the mark cache")                                                                                                                                \
+    M(SettingUInt64, mark_cache_min_lifetime, 0, "Deprecated setting. Do not affect the mark cache")                                                                                                                                    \
                                                                                                                                                                                                                                         \
     M(SettingFloat, max_streams_to_max_threads_ratio, 1, "Allows you to use more sources than the number of threads - to more evenly distribute work across threads. It is assumed that "                                               \
                                                          "this is a temporary solution, since it will be possible in the future to make the number of sources equal to the number of "                                                  \
@@ -148,7 +148,7 @@ struct Settings
                                                                                                                                                                                                                                         \
     M(SettingFloat, memory_tracker_fault_probability, 0., "For testing of `exception safety` - throw an exception every time you allocate memory with the specified probability.")                                                      \
                                                                                                                                                                                                                                         \
-    M(SettingInt64 , memory_tracker_accuracy_diff_for_test, 0, "For testing of the accuracy of the memory tracker - throw an exception when real_rss is much larger than tracked amount.")                                                       \
+    M(SettingInt64 , memory_tracker_accuracy_diff_for_test, 0, "For testing of the accuracy of the memory tracker - throw an exception when real_rss is much larger than tracked amount.")                                              \
                                                                                                                                                                                                                                         \
     M(SettingBool, enable_http_compression, 0, "Compress the result if the client over HTTP said that it understands data compressed by gzip or deflate.")                                                                              \
     M(SettingInt64, http_zlib_compression_level, 3, "Compression level - used if the client on HTTP said that it understands data compressed by gzip or deflate.")                                                                      \
@@ -319,7 +319,7 @@ struct Settings
     M(SettingUInt64, dt_checksum_frame_size, DBMS_DEFAULT_BUFFER_SIZE, "Frame size for delta tree stable storage")                                                                                                                      \
                                                                                                                                                                                                                                         \
     M(SettingDouble, dt_page_gc_threshold, 0.5, "Max valid rate of deciding to do a GC in PageStorage")                                                                                                                                 \
-    M(SettingBool, dt_enable_read_thread, true, "Enable storage read thread or not")                                                                                                                                                   \
+    M(SettingBool, dt_enable_read_thread, true, "Enable storage read thread or not")                                                                                                                                                    \
                                                                                                                                                                                                                                         \
     M(SettingChecksumAlgorithm, dt_checksum_algorithm, ChecksumAlgo::XXH3, "Checksum algorithm for delta tree stable storage")                                                                                                          \
     M(SettingCompressionMethod, dt_compression_method, CompressionMethod::LZ4, "The method of data compression when writing.")                                                                                                          \
@@ -349,7 +349,7 @@ struct Settings
                                                              "unlimited.")                                                                                                                                                              \
     M(SettingUInt64, task_scheduler_thread_soft_limit, 5000, "The soft limit of threads for min_tso task scheduler.")                                                                                                                   \
     M(SettingUInt64, task_scheduler_thread_hard_limit, 10000, "The hard limit of threads for min_tso task scheduler.")                                                                                                                  \
-    M(SettingUInt64, task_scheduler_active_set_soft_limit, 0, "The soft limit of count of active query set for min_tso task scheduler.")                                                                                                                   \
+    M(SettingUInt64, task_scheduler_active_set_soft_limit, 0, "The soft limit of count of active query set for min_tso task scheduler.")                                                                                                \
     M(SettingUInt64, max_grpc_pollers, 200, "The maximum number of grpc thread pool's non-temporary threads, better tune it up to avoid frequent creation/destruction of threads.")                                                     \
     M(SettingBool, enable_elastic_threadpool, true, "Enable elastic thread pool for thread create usages.")                                                                                                                             \
     M(SettingUInt64, elastic_threadpool_init_cap, 400, "The size of elastic thread pool.")                                                                                                                                              \
@@ -369,9 +369,9 @@ struct Settings
     M(SettingBool, enable_planner, true, "Enable planner")                                                                                                                                                                              \
     M(SettingBool, enable_pipeline, false, "Enable pipeline model")                                                                                                                                                                     \
     M(SettingUInt64, pipeline_task_thread_pool_size, 0, "The size of task thread pool. 0 means using number_of_logical_cpu_cores.")                                                                                                     \
-    M(SettingTaskQueueType, pipeline_task_thread_pool_queue_type, TaskQueueType::MLFQ, "")                                                                                                                                              \
+    M(SettingTaskQueueType, pipeline_task_thread_pool_queue_type, TaskQueueType::MLFQ, "The task queue of task thread pool")                                                                                                            \
     M(SettingUInt64, pipeline_spill_thread_pool_size, 0, "The size of spill thread pool. 0 means using number_of_logical_cpu_cores.")                                                                                                   \
-    M(SettingTaskQueueType, pipeline_spill_thread_pool_queue_type, TaskQueueType::MLFQ, "")
+    M(SettingTaskQueueType, pipeline_spill_thread_pool_queue_type, TaskQueueType::MLFQ, "The task queue of spill thread pool")
 // clang-format on
 #define DECLARE(TYPE, NAME, DEFAULT, DESCRIPTION) TYPE NAME{DEFAULT};
 

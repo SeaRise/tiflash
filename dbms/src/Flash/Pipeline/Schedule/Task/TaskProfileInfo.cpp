@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #include <Common/FmtUtils.h>
-#include <Flash/Pipeline/Schedule/TaskProfileInfo.h>
+#include <Flash/Pipeline/Schedule/Task/TaskProfileInfo.h>
 
 namespace DB
 {

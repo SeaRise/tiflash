@@ -17,8 +17,8 @@
 #include <Flash/Executor/PipelineExecutorStatus.h>
 #include <Flash/Pipeline/Exec/PipelineExecBuilder.h>
 #include <Flash/Pipeline/Pipeline.h>
-#include <Flash/Pipeline/Schedule/Event.h>
-#include <Flash/Pipeline/Schedule/PlainPipelineEvent.h>
+#include <Flash/Pipeline/Schedule/Event/Event.h>
+#include <Flash/Pipeline/Schedule/Event/PlainPipelineEvent.h>
 #include <Flash/Planner/PhysicalPlanNode.h>
 #include <Flash/Planner/plans/PhysicalGetResultSink.h>
 #include <Flash/Statistics/traverseExecutors.h>

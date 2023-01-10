@@ -15,7 +15,7 @@
 #pragma once
 
 #include <Common/Logger.h>
-#include <Flash/Pipeline/Schedule/TaskQueue.h>
+#include <Flash/Pipeline/Schedule/TaskQueue/TaskQueue.h>
 
 #include <deque>
 #include <mutex>

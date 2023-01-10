@@ -15,7 +15,7 @@
 #pragma once
 
 #include <Flash/Executor/ExecutionResult.h>
-#include <Flash/Pipeline/Schedule/TaskProfileInfo.h>
+#include <Flash/Pipeline/Schedule/Task/TaskProfileInfo.h>
 
 #include <atomic>
 #include <mutex>

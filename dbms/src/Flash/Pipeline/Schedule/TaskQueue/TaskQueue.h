@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include <Flash/Pipeline/Schedule/Task.h>
-#include <Flash/Pipeline/Schedule/TaskQueueType.h>
+#include <Flash/Pipeline/Schedule/Task/Task.h>
+#include <Flash/Pipeline/Schedule/TaskQueue/TaskQueueType.h>
 
 #include <memory>
 #include <vector>

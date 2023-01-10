@@ -14,9 +14,9 @@
 
 #include <Common/Exception.h>
 #include <Common/setThreadName.h>
-#include <Flash/Pipeline/Schedule/FIFOTaskQueue.h>
-#include <Flash/Pipeline/Schedule/MultiLevelFeedbackQueue.h>
-#include <Flash/Pipeline/Schedule/TaskHelper.h>
+#include <Flash/Pipeline/Schedule/Task/TaskHelper.h>
+#include <Flash/Pipeline/Schedule/TaskQueue/FIFOTaskQueue.h>
+#include <Flash/Pipeline/Schedule/TaskQueue/MultiLevelFeedbackQueue.h>
 #include <Flash/Pipeline/Schedule/TaskScheduler.h>
 #include <Flash/Pipeline/Schedule/TaskThreadPool.h>
 #include <common/likely.h>

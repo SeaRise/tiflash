@@ -15,7 +15,7 @@
 #pragma once
 
 #include <Common/MemoryTracker.h>
-#include <Flash/Pipeline/Schedule/TaskProfileInfo.h>
+#include <Flash/Pipeline/Schedule/Task/TaskProfileInfo.h>
 #include <memory.h>
 
 namespace DB

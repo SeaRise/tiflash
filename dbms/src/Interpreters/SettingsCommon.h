@@ -19,7 +19,7 @@
 #include <Common/getNumberOfCPUCores.h>
 #include <Core/Field.h>
 #include <DataStreams/SizeLimits.h>
-#include <Flash/Pipeline/Schedule/TaskQueueType.h>
+#include <Flash/Pipeline/Schedule/TaskQueue/TaskQueueType.h>
 #include <IO/CompressedStream.h>
 #include <IO/ReadBufferFromString.h>
 #include <IO/ReadHelpers.h>

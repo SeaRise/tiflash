@@ -1,4 +1,4 @@
-// Copyright 2022 PingCAP, Ltd.
+// Copyright 2023 PingCAP, Ltd.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ class IBlockInputStream;
 using BlockInputStreamPtr = std::shared_ptr<IBlockInputStream>;
 
 // wrap for BlockInputStream
-class BlockInputStreamSource : public Source
+class BlockInputStreamSource : public SourceOp
 {
 public:
     explicit BlockInputStreamSource(const BlockInputStreamPtr & impl_);

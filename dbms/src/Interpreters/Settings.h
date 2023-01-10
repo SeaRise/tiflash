@@ -1,4 +1,4 @@
-// Copyright 2022 PingCAP, Ltd.
+// Copyright 2023 PingCAP, Ltd.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -368,10 +368,10 @@ struct Settings
                                                                                                                                                                                                                                         \
     M(SettingBool, enable_planner, true, "Enable planner")                                                                                                                                                                              \
     M(SettingBool, enable_pipeline, false, "Enable pipeline model")                                                                                                                                                                     \
-    M(SettingUInt64, pipeline_task_executor_threads, 0, "The thread num of task executor. 0 means using hardware_concurrency.")                                                                                                         \
-    M(SettingTaskQueueType, pipeline_task_executor_queue_type, TaskQueueType::MLFQ, "")                                                                                                                                                 \
-    M(SettingUInt64, pipeline_spill_executor_threads, 0, "The thread num of spill executor. 0 means using hardware_concurrency.")                                                                                                       \
-    M(SettingTaskQueueType, pipeline_spill_executor_queue_type, TaskQueueType::MLFQ, "")
+    M(SettingUInt64, pipeline_task_thread_pool_size, 0, "The size of task thread pool. 0 means using number_of_logical_cpu_cores.")                                                                                                     \
+    M(SettingTaskQueueType, pipeline_task_thread_pool_queue_type, TaskQueueType::MLFQ, "")                                                                                                                                              \
+    M(SettingUInt64, pipeline_spill_thread_pool_size, 0, "The size of spill thread pool. 0 means using number_of_logical_cpu_cores.")                                                                                                   \
+    M(SettingTaskQueueType, pipeline_spill_thread_pool_queue_type, TaskQueueType::MLFQ, "")
 // clang-format on
 #define DECLARE(TYPE, NAME, DEFAULT, DESCRIPTION) TYPE NAME{DEFAULT};
 

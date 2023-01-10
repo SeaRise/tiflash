@@ -1,4 +1,4 @@
-// Copyright 2022 PingCAP, Ltd.
+// Copyright 2023 PingCAP, Ltd.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ struct DAGPipeline;
 class Context;
 class DAGContext;
 
-struct OperatorPipelineGroupBuilder;
+struct PipelineExecGroupBuilder;
 
 class Pipeline;
 using PipelinePtr = std::shared_ptr<Pipeline>;
@@ -58,9 +58,9 @@ public:
 
     virtual size_t childrenSize() const = 0;
 
-    virtual void transform(DAGPipeline & pipeline, Context & context, size_t max_streams);
+    virtual void buildBlockInputStream(DAGPipeline & pipeline, Context & context, size_t max_streams);
 
-    virtual void transform(OperatorPipelineGroupBuilder & /*group_builder*/, Context & /*context*/, size_t /*concurrency*/);
+    virtual void buildPipelineExec(PipelineExecGroupBuilder & /*group_builder*/, Context & /*context*/, size_t /*concurrency*/);
 
     virtual void buildPipeline(PipelineBuilder & pipeline_builder, const PipelinePtr & pipeline);
 
@@ -82,7 +82,7 @@ public:
     virtual void detach() {}
 
 protected:
-    virtual void transformImpl(DAGPipeline & /*pipeline*/, Context & /*context*/, size_t /*max_streams*/){};
+    virtual void buildBlockInputStreamImpl(DAGPipeline & /*pipeline*/, Context & /*context*/, size_t /*max_streams*/){};
 
     void recordProfileStreams(DAGPipeline & pipeline, const Context & context);
 

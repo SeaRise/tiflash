@@ -1,4 +1,4 @@
-# Copyright 2022 PingCAP, Ltd.
+# Copyright 2023 PingCAP, Ltd.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@ add_headers_and_sources(flash_service ./Coprocessor)
 add_headers_and_sources(flash_service ./Mpp)
 add_headers_and_sources(flash_service ./Executor)
 add_headers_and_sources(flash_service ./Pipeline)
+add_headers_and_sources(flash_service ./Pipeline/Exec)
+add_headers_and_sources(flash_service ./Pipeline/Schedule)
 add_headers_and_sources(flash_service ./Planner)
 add_headers_and_sources(flash_service ./Planner/plans)
 add_headers_and_sources(flash_service ./Statistics)
@@ -29,7 +31,10 @@ target_link_libraries(flash_service dbms)
 
 if (ENABLE_TESTS)
     add_subdirectory(Coprocessor/tests)
+    add_subdirectory(Executor/tests)
     add_subdirectory(Pipeline/tests)
+    add_subdirectory(Pipeline/Exec/tests)
+    add_subdirectory(Pipeline/Schedule/tests)
     add_subdirectory(Planner/tests)
     add_subdirectory(tests)
 endif ()

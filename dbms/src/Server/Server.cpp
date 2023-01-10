@@ -1,4 +1,4 @@
-// Copyright 2022 PingCAP, Ltd.
+// Copyright 2023 PingCAP, Ltd.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -42,7 +42,7 @@
 #include <Flash/DiagnosticsService.h>
 #include <Flash/FlashService.h>
 #include <Flash/Mpp/GRPCCompletionQueuePool.h>
-#include <Flash/Pipeline/TaskScheduler.h>
+#include <Flash/Pipeline/Schedule/TaskScheduler.h>
 #include <Functions/registerFunctions.h>
 #include <IO/HTTPCommon.h>
 #include <IO/ReadHelpers.h>
@@ -1272,15 +1272,15 @@ int Server::main(const std::vector<std::string> & /*args*/)
     bool enable_pipeline = settings.enable_pipeline && !global_context->isTest();
     if (enable_pipeline)
     {
-        size_t task_executor_thread_num = settings.pipeline_task_executor_threads == 0
-            ? std::thread::hardware_concurrency()
-            : static_cast<size_t>(settings.pipeline_task_executor_threads);
-        size_t spill_executor_thread_num = settings.pipeline_spill_executor_threads == 0
-            ? std::thread::hardware_concurrency()
-            : static_cast<size_t>(settings.pipeline_spill_executor_threads);
+        size_t task_thread_pool_size = settings.pipeline_task_thread_pool_size == 0
+            ? getNumberOfLogicalCPUCores()
+            : static_cast<size_t>(settings.pipeline_task_thread_pool_size);
+        size_t spill_thread_pool_size = settings.pipeline_spill_thread_pool_size == 0
+            ? getNumberOfLogicalCPUCores()
+            : static_cast<size_t>(settings.pipeline_spill_thread_pool_size);
         TaskSchedulerConfig config{
-            {task_executor_thread_num, settings.pipeline_task_executor_queue_type},
-            {spill_executor_thread_num, settings.pipeline_spill_executor_queue_type},
+            {task_thread_pool_size, settings.pipeline_task_thread_pool_queue_type},
+            {spill_thread_pool_size, settings.pipeline_spill_thread_pool_queue_type},
         };
         assert(!TaskScheduler::instance);
         TaskScheduler::instance = std::make_unique<TaskScheduler>(config);

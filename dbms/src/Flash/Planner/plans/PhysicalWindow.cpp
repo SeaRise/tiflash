@@ -1,4 +1,4 @@
-// Copyright 2022 PingCAP, Ltd.
+// Copyright 2023 PingCAP, Ltd.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -61,9 +61,9 @@ PhysicalPlanNodePtr PhysicalWindow::build(
     return physical_window;
 }
 
-void PhysicalWindow::transformImpl(DAGPipeline & pipeline, Context & context, size_t max_streams)
+void PhysicalWindow::buildBlockInputStreamImpl(DAGPipeline & pipeline, Context & context, size_t max_streams)
 {
-    child->transform(pipeline, context, max_streams);
+    child->buildBlockInputStream(pipeline, context, max_streams);
 
     executeExpression(pipeline, window_description.before_window, log, "before window");
     window_description.fillArgColumnNumbers();

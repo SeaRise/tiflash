@@ -1,4 +1,4 @@
-// Copyright 2022 PingCAP, Ltd.
+// Copyright 2023 PingCAP, Ltd.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -282,10 +282,10 @@ String PhysicalPlan::toString() const
     return PhysicalPlanVisitor::visitToString(root_node);
 }
 
-void PhysicalPlan::transform(DAGPipeline & pipeline, Context & context, size_t max_streams)
+void PhysicalPlan::buildBlockInputStream(DAGPipeline & pipeline, Context & context, size_t max_streams)
 {
     assert(root_node);
-    root_node->transform(pipeline, context, max_streams);
+    root_node->buildBlockInputStream(pipeline, context, max_streams);
 }
 
 Pipelines PhysicalPlan::toPipelines()

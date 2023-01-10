@@ -1,18 +1,4 @@
-// Copyright 2022 PingCAP, Ltd.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-// Copyright 2022 PingCAP, Ltd.
+// Copyright 2023 PingCAP, Ltd.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -244,18 +230,18 @@ void PhysicalJoin::buildSideTransform(DAGPipeline & build_pipeline, Context & co
     dag_context.addSubquery(execId(), std::move(build_query));
 }
 
-void PhysicalJoin::transformImpl(DAGPipeline & pipeline, Context & context, size_t max_streams)
+void PhysicalJoin::buildBlockInputStreamImpl(DAGPipeline & pipeline, Context & context, size_t max_streams)
 {
     /// The build side needs to be transformed first.
     {
         DAGPipeline build_pipeline;
-        build()->transform(build_pipeline, context, max_streams);
+        build()->buildBlockInputStream(build_pipeline, context, max_streams);
         buildSideTransform(build_pipeline, context, max_streams);
     }
 
     {
         DAGPipeline & probe_pipeline = pipeline;
-        probe()->transform(probe_pipeline, context, max_streams);
+        probe()->buildBlockInputStream(probe_pipeline, context, max_streams);
         probeSideTransform(probe_pipeline, context, max_streams);
     }
 

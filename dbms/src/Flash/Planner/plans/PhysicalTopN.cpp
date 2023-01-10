@@ -1,4 +1,4 @@
-// Copyright 2022 PingCAP, Ltd.
+// Copyright 2023 PingCAP, Ltd.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -56,9 +56,9 @@ PhysicalPlanNodePtr PhysicalTopN::build(
     return physical_top_n;
 }
 
-void PhysicalTopN::transformImpl(DAGPipeline & pipeline, Context & context, size_t max_streams)
+void PhysicalTopN::buildBlockInputStreamImpl(DAGPipeline & pipeline, Context & context, size_t max_streams)
 {
-    child->transform(pipeline, context, max_streams);
+    child->buildBlockInputStream(pipeline, context, max_streams);
 
     executeExpression(pipeline, before_sort_actions, log, "before TopN");
 

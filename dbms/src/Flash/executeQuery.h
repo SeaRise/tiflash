@@ -1,4 +1,4 @@
-// Copyright 2022 PingCAP, Ltd.
+// Copyright 2023 PingCAP, Ltd.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +21,8 @@ namespace DB
 {
 class Context;
 
-BlockIO executeQuery(Context & context, bool internal = false);
+// Use BlockInputStream-based pull model directly.
+BlockIO executeAsBlockIO(Context & context, bool internal = false);
+
 QueryExecutorPtr queryExecute(Context & context, bool internal = false);
 } // namespace DB

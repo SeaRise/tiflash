@@ -15,7 +15,6 @@
 #pragma once
 
 #include <Flash/Pipeline/Schedule/Task/Task.h>
-#include <Flash/Pipeline/Schedule/TaskQueue/TaskQueueType.h>
 
 #include <memory>
 #include <vector>
@@ -44,7 +43,5 @@ public:
     virtual bool empty() = 0;
 
     virtual void close() = 0;
-
-    virtual TaskQueueType getType() const = 0;
 };
 } // namespace DB

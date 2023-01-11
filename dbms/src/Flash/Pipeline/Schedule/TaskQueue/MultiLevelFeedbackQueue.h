@@ -16,6 +16,7 @@
 
 #include <Common/Logger.h>
 #include <Flash/Pipeline/Schedule/TaskQueue/TaskQueue.h>
+#include <Flash/Pipeline/Schedule/TaskQueue/TaskQueueType.h>
 
 #include <array>
 #include <atomic>
@@ -82,11 +83,11 @@ public:
 
     void close() override;
 
-    TaskQueueType getType() const override { return TaskQueueType::MLFQ; }
-
     const UnitQueueInfo & getUnitQueueInfo(size_t level);
 
 public:
+    static constexpr TaskQueueType queue_type = TaskQueueType::MLFQ;
+
     static constexpr size_t QUEUE_SIZE = 8;
 
     // The time slice of the i-th level is (i+1)*LEVEL_TIME_SLICE_BASE ns,

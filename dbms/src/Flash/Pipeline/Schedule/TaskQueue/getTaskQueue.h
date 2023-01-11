@@ -14,37 +14,37 @@
 
 #pragma once
 
-#include <Common/Logger.h>
+#include <Common/Exception.h>
 #include <Flash/Pipeline/Schedule/TaskQueue/TaskQueue.h>
 #include <Flash/Pipeline/Schedule/TaskQueue/TaskQueueType.h>
 
-#include <deque>
-#include <mutex>
+#include <magic_enum.hpp>
 
 namespace DB
 {
-class FIFOTaskQueue : public TaskQueue
+template <typename T>
+bool trySetTaskQueue(TaskQueuePtr & task_queue, TaskQueueType queue_type)
 {
-public:
-    void submit(TaskPtr && task) override;
+    if (T::queue_type == queue_type)
+    {
+        task_queue = std::make_unique<T>();
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
 
-    void submit(std::vector<TaskPtr> & tasks) override;
-
-    bool take(TaskPtr & task) override;
-
-    bool empty() override;
-
-    void close() override;
-
-public:
-    static constexpr TaskQueueType queue_type = TaskQueueType::FIFO;
-
-private:
-    std::mutex mu;
-    std::condition_variable cv;
-    bool is_closed = false;
-    std::deque<TaskPtr> task_queue;
-
-    LoggerPtr logger = Logger::get("FIFOTaskQueue");
-};
+template <typename... Ts>
+TaskQueuePtr getTaskQueue(TaskQueueType queue_type)
+{
+    TaskQueuePtr task_queue;
+    RUNTIME_CHECK_MSG(
+        (trySetTaskQueue<Ts>(task_queue, queue_type) || ...),
+        "unsupport task queue type {}",
+        magic_enum::enum_name(queue_type));
+    assert(task_queue);
+    return task_queue;
+}
 } // namespace DB

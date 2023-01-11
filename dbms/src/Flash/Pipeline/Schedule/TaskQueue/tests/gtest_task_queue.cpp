@@ -44,6 +44,7 @@ class TaskQueueTestRunner : public ::testing::Test
 {
 };
 
+// fifo
 TEST_F(TaskQueueTestRunner, fifo)
 try
 {
@@ -83,6 +84,7 @@ try
 }
 CATCH
 
+// mlfq
 TEST_F(TaskQueueTestRunner, mlfq_init)
 try
 {

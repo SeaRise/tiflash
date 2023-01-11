@@ -27,8 +27,6 @@
 #include <Poco/String.h>
 #include <Poco/Timespan.h>
 
-#include <magic_enum.hpp>
-
 namespace DB
 {
 namespace ErrorCodes
@@ -918,17 +916,9 @@ public:
         return *this;
     }
 
-    static TaskQueueType getTaskQueueType(const String & s)
-    {
-        auto value = magic_enum::enum_cast<TaskQueueType>(Poco::toUpper(s));
-        RUNTIME_CHECK_MSG(value, "Unknown task queue type: '{}'", s);
-        return *value;
-    }
+    static TaskQueueType getTaskQueueType(const String & s);
 
-    String toString() const
-    {
-        return String(magic_enum::enum_name(value));
-    }
+    String toString() const;
 
     void set(TaskQueueType x)
     {

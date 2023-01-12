@@ -86,7 +86,7 @@ void SpillThreadPool::handleTask(TaskPtr && task)
         task.reset();
         break;
     default:
-        throw Exception(fmt::format("Unexpected task state {} at SpillThreadPool", magic_enum::enum_name(status)));
+        RUNTIME_ASSERT(true, logger, "Unexpected task state {}", magic_enum::enum_name(status));
     }
 }
 

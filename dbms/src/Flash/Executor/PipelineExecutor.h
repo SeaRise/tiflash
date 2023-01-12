@@ -55,7 +55,7 @@ public:
     PipelineExecutor(
         const ProcessListEntryPtr & process_list_entry_,
         Context & context_,
-        const PipelinePtr & root_pipeline_
+        const PipelinePtr & root_pipeline_,
         const String & req_id);
 
     String toString() const override;

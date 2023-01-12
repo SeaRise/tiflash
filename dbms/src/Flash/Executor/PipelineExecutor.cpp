@@ -22,7 +22,7 @@ namespace DB
 PipelineExecutor::PipelineExecutor(
     const ProcessListEntryPtr & process_list_entry_,
     Context & context_,
-    const PipelinePtr & root_pipeline_)
+    const PipelinePtr & root_pipeline_,
     const String & req_id)
     : QueryExecutor(process_list_entry_)
     , context(context_)

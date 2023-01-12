@@ -58,41 +58,35 @@ void SpillThreadPool::submit(TaskPtr && task)
 void SpillThreadPool::handleTask(TaskPtr && task)
 {
     assert(task);
-    task->profile_info.addSpillPendingTime();
     TRACE_MEMORY(task);
-    UInt64 time_spent = 0;
+
+    task->profile_info.addSpillPendingTime();
+    UInt64 total_time_spent = 0;
+    ExecTaskStatus status;
     while (true)
     {
-        assert(task);
-        auto status = task->spill();
-        time_spent += task->profile_info.elapsedFromPrev();
-        switch (status)
-        {
-        case ExecTaskStatus::SPILLING:
-        {
-            static constexpr UInt64 YIELD_MAX_TIME_SPENT = 100'000'000L;
-            if (time_spent >= YIELD_MAX_TIME_SPENT)
-            {
-                task_queue->updateStatistics(task, time_spent);
-                task->profile_info.addSpillTime(time_spent);
-                submit(std::move(task));
-                return;
-            }
+        status = task->spill();
+        auto inc_time_spent = task->profile_info.elapsedFromPrev();
+        task_queue->updateStatistics(task, inc_time_spent);
+        total_time_spent += inc_time_spent;
+        if (status != ExecTaskStatus::SPILLING || total_time_spent >= YIELD_MAX_TIME_SPENT)
             break;
-        }
-        case ExecTaskStatus::RUNNING:
-            task_queue->updateStatistics(task, time_spent);
-            task->profile_info.addSpillTime(time_spent);
-            scheduler.task_thread_pool.submit(std::move(task));
-            return;
-        case FINISH_STATUS:
-            task_queue->updateStatistics(task, time_spent);
-            task->profile_info.addSpillTime(time_spent);
-            task.reset();
-            return;
-        default:
-            __builtin_unreachable();
-        }
+    }
+    task->profile_info.addSpillTime(total_time_spent);
+
+    switch (status)
+    {
+    case ExecTaskStatus::SPILLING:
+        submit(std::move(task));
+        break;
+    case ExecTaskStatus::RUNNING:
+        scheduler.task_thread_pool.submit(std::move(task));
+        break;
+    case FINISH_STATUS:
+        task.reset();
+        break;
+    default:
+        throw Exception(fmt::format("Unexpected task state {} at SpillThreadPool", magic_enum::enum_name(status)));
     }
 }
 

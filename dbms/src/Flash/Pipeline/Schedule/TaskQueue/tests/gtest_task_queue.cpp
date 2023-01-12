@@ -63,7 +63,7 @@ try
         queue->close();
     });
     // take valid task
-    thread_manager->schedule(false, "submit", [&]() {
+    thread_manager->schedule(false, "take", [&]() {
         TaskPtr task;
         size_t expect_index = 0;
         while (queue->take(task))
@@ -136,7 +136,7 @@ try
         queue->close();
     });
     // take valid task
-    thread_manager->schedule(false, "submit", [&]() {
+    thread_manager->schedule(false, "take", [&]() {
         std::unordered_set<size_t> indexes;
         for (size_t i = 0; i < valid_task_num; ++i)
             indexes.insert(i);

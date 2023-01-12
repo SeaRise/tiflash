@@ -23,6 +23,8 @@
 #include <common/likely.h>
 #include <common/logger_useful.h>
 
+#include <magic_enum.hpp>
+
 namespace DB
 {
 TaskThreadPool::TaskThreadPool(TaskScheduler & scheduler_, const ThreadPoolConfig & config)
@@ -68,46 +70,38 @@ void TaskThreadPool::loop() noexcept
 void TaskThreadPool::handleTask(TaskPtr & task)
 {
     assert(task);
-    task->profile_info.addExecutePendingTime();
     TRACE_MEMORY(task);
-    UInt64 time_spent = 0;
+
+    task->profile_info.addExecutePendingTime();
+    UInt64 total_time_spent = 0;
+    ExecTaskStatus status;
     while (true)
     {
-        assert(task);
-        auto status = task->execute();
-        time_spent += task->profile_info.elapsedFromPrev();
-        switch (status)
-        {
-        case ExecTaskStatus::RUNNING:
-        {
-            static constexpr UInt64 YIELD_MAX_TIME_SPENT = 100'000'000L;
-            if (time_spent >= YIELD_MAX_TIME_SPENT)
-            {
-                task_queue->updateStatistics(task, time_spent);
-                task->profile_info.addExecuteTime(time_spent);
-                submit(std::move(task));
-                return;
-            }
+        status = task->execute();
+        auto inc_time_spent = task->profile_info.elapsedFromPrev();
+        task_queue->updateStatistics(task, inc_time_spent);
+        total_time_spent += inc_time_spent;
+        if (status != ExecTaskStatus::RUNNING || total_time_spent >= YIELD_MAX_TIME_SPENT)
             break;
-        }
-        case ExecTaskStatus::WAITING:
-            task_queue->updateStatistics(task, time_spent);
-            task->profile_info.addExecuteTime(time_spent);
-            scheduler.wait_reactor.submit(std::move(task));
-            return;
-        case ExecTaskStatus::SPILLING:
-            task_queue->updateStatistics(task, time_spent);
-            task->profile_info.addExecuteTime(time_spent);
-            scheduler.spill_thread_pool.submit(std::move(task));
-            return;
-        case FINISH_STATUS:
-            task_queue->updateStatistics(task, time_spent);
-            task->profile_info.addExecuteTime(time_spent);
-            task.reset();
-            return;
-        default:
-            __builtin_unreachable();
-        }
+    }
+    task->profile_info.addExecuteTime(total_time_spent);
+
+    switch (status)
+    {
+    case ExecTaskStatus::RUNNING:
+        submit(std::move(task));
+        break;
+    case ExecTaskStatus::WAITING:
+        scheduler.wait_reactor.submit(std::move(task));
+        break;
+    case ExecTaskStatus::SPILLING:
+        scheduler.spill_thread_pool.submit(std::move(task));
+        break;
+    case FINISH_STATUS:
+        task.reset();
+        break;
+    default:
+        throw Exception(fmt::format("Unexpected task state {} at TaskThreadPool", magic_enum::enum_name(status)));
     }
 }
 

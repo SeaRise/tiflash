@@ -35,4 +35,5 @@ namespace DB
     assert(0 == CurrentMemoryTracker::getLocalDeltaMemory());
 
 static constexpr UInt64 YIELD_MAX_TIME_SPENT = 100'000'000L;
+
 } // namespace DB

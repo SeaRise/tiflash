@@ -101,7 +101,7 @@ void TaskThreadPool::handleTask(TaskPtr & task)
         task.reset();
         break;
     default:
-        RUNTIME_ASSERT(true, logger, "Unexpected task state {}", magic_enum::enum_name(status));
+        RUNTIME_ASSERT(false, logger, "Unexpected task state {}", magic_enum::enum_name(status));
     }
 }
 

@@ -25,6 +25,8 @@
 #include <common/logger_useful.h>
 #include <errno.h>
 
+#include <magic_enum.hpp>
+
 namespace DB
 {
 SpillThreadPool::SpillThreadPool(TaskScheduler & scheduler_, const ThreadPoolConfig & config)
@@ -86,7 +88,7 @@ void SpillThreadPool::handleTask(TaskPtr && task)
         task.reset();
         break;
     default:
-        RUNTIME_ASSERT(true, logger, "Unexpected task state {}", magic_enum::enum_name(status));
+        RUNTIME_ASSERT(false, logger, "Unexpected task state {}", magic_enum::enum_name(status));
     }
 }
 

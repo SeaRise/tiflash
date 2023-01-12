@@ -56,8 +56,7 @@ public:
             task.reset();
             return true;
         default:
-            RUNTIME_ASSERT(true, "Unexpected task state {}", magic_enum::enum_name(status));
-            return true;
+            RUNTIME_ASSERT(false, "Unexpected task state {}", magic_enum::enum_name(status));
         }
     }
 

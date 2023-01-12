@@ -78,11 +78,11 @@ void SpillThreadPool::handleTask(TaskPtr && task)
 
     switch (status)
     {
-    case ExecTaskStatus::SPILLING:
-        submit(std::move(task));
-        break;
     case ExecTaskStatus::RUNNING:
         scheduler.task_thread_pool.submit(std::move(task));
+        break;
+    case ExecTaskStatus::SPILLING:
+        submit(std::move(task));
         break;
     case FINISH_STATUS:
         task.reset();

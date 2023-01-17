@@ -23,8 +23,6 @@
 #include <common/likely.h>
 #include <common/logger_useful.h>
 
-#include <magic_enum.hpp>
-
 namespace DB
 {
 TaskThreadPool::TaskThreadPool(TaskScheduler & scheduler_, const ThreadPoolConfig & config)
@@ -35,7 +33,7 @@ TaskThreadPool::TaskThreadPool(TaskScheduler & scheduler_, const ThreadPoolConfi
     RUNTIME_CHECK(thread_num > 0);
     threads.reserve(thread_num);
     for (size_t i = 0; i < thread_num; ++i)
-        threads.emplace_back(&TaskThreadPool::loop, this);
+        threads.emplace_back(&TaskThreadPool::loop, this, i);
 }
 
 void TaskThreadPool::close()
@@ -50,24 +48,26 @@ void TaskThreadPool::waitForStop()
     LOG_INFO(logger, "task thread pool is stopped");
 }
 
-void TaskThreadPool::loop() noexcept
+void TaskThreadPool::loop(size_t thread_no) noexcept
 {
-    setThreadName("TaskThreadPool");
-    LOG_INFO(logger, "start task thread pool loop");
+    auto thread_no_str = fmt::format("thread_no={}", thread_no);
+    auto thread_logger = logger->getChild(thread_no_str);
+    setThreadName(thread_no_str.c_str());
+    LOG_INFO(thread_logger, "start loop");
     ASSERT_MEMORY_TRACKER
 
     TaskPtr task;
     while (likely(task_queue->take(task)))
     {
-        handleTask(task);
+        handleTask(task, thread_logger);
         assert(!task);
         ASSERT_MEMORY_TRACKER
     }
 
-    LOG_INFO(logger, "task thread pool loop finished");
+    LOG_INFO(thread_logger, "loop finished");
 }
 
-void TaskThreadPool::handleTask(TaskPtr & task)
+void TaskThreadPool::handleTask(TaskPtr & task, const LoggerPtr & log)
 {
     assert(task);
     TRACE_MEMORY(task);
@@ -81,7 +81,8 @@ void TaskThreadPool::handleTask(TaskPtr & task)
         auto inc_time_spent = task->profile_info.elapsedFromPrev();
         task_queue->updateStatistics(task, inc_time_spent);
         total_time_spent += inc_time_spent;
-        if (status != ExecTaskStatus::RUNNING || total_time_spent >= YIELD_MAX_TIME_SPENT)
+        // The executing task should yield if it takes more than `YIELD_MAX_TIME_SPENT_NS`.
+        if (status != ExecTaskStatus::RUNNING || total_time_spent >= YIELD_MAX_TIME_SPENT_NS)
             break;
     }
     task->profile_info.addExecuteTime(total_time_spent);
@@ -101,7 +102,7 @@ void TaskThreadPool::handleTask(TaskPtr & task)
         task.reset();
         break;
     default:
-        RUNTIME_ASSERT(false, logger, "Unexpected task state {}", magic_enum::enum_name(status));
+        UNEXPECTED_STATUS(log, status);
     }
 }
 

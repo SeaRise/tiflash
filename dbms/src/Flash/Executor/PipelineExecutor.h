@@ -27,7 +27,7 @@ using PipelinePtr = std::shared_ptr<Pipeline>;
 using Pipelines = std::vector<PipelinePtr>;
 
 /**
- * PipelineExecutor is the implementation of the pipeline-base execution model.
+ * PipelineExecutor is the implementation of the pipeline-based execution model.
  * 
  *                                            ┌─────────────────────┐
  *                                            │  task scheduler     │
@@ -47,7 +47,7 @@ using Pipelines = std::vector<PipelinePtr>;
  *                                            └─────────────────────┘
  * 
  * As shown above, the pipeline generates a number of events, which are executed in dependency order, 
- * and the events generate a number of tasks that are submitted to the task scheduler for execution.
+ * and the events generate a number of tasks that will be submitted to the TaskScheduler for execution.
  */
 class PipelineExecutor : public QueryExecutor
 {

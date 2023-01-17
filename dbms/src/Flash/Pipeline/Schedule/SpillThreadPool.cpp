@@ -25,8 +25,6 @@
 #include <common/logger_useful.h>
 #include <errno.h>
 
-#include <magic_enum.hpp>
-
 namespace DB
 {
 SpillThreadPool::SpillThreadPool(TaskScheduler & scheduler_, const ThreadPoolConfig & config)
@@ -37,7 +35,7 @@ SpillThreadPool::SpillThreadPool(TaskScheduler & scheduler_, const ThreadPoolCon
     RUNTIME_CHECK(thread_num > 0);
     threads.reserve(thread_num);
     for (size_t i = 0; i < thread_num; ++i)
-        threads.emplace_back(&SpillThreadPool::loop, this);
+        threads.emplace_back(&SpillThreadPool::loop, this, i);
 }
 
 void SpillThreadPool::close()
@@ -57,7 +55,7 @@ void SpillThreadPool::submit(TaskPtr && task)
     task_queue->submit(std::move(task));
 }
 
-void SpillThreadPool::handleTask(TaskPtr && task)
+void SpillThreadPool::handleTask(TaskPtr && task, const LoggerPtr & log)
 {
     assert(task);
     TRACE_MEMORY(task);
@@ -71,7 +69,8 @@ void SpillThreadPool::handleTask(TaskPtr && task)
         auto inc_time_spent = task->profile_info.elapsedFromPrev();
         task_queue->updateStatistics(task, inc_time_spent);
         total_time_spent += inc_time_spent;
-        if (status != ExecTaskStatus::SPILLING || total_time_spent >= YIELD_MAX_TIME_SPENT)
+        // The spilling task should yield if it takes more than `YIELD_MAX_TIME_SPENT_NS`.
+        if (status != ExecTaskStatus::SPILLING || total_time_spent >= YIELD_MAX_TIME_SPENT_NS)
             break;
     }
     task->profile_info.addSpillTime(total_time_spent);
@@ -88,24 +87,26 @@ void SpillThreadPool::handleTask(TaskPtr && task)
         task.reset();
         break;
     default:
-        RUNTIME_ASSERT(false, logger, "Unexpected task state {}", magic_enum::enum_name(status));
+        UNEXPECTED_STATUS(log, status);
     }
 }
 
-void SpillThreadPool::loop() noexcept
+void SpillThreadPool::loop(size_t thread_no) noexcept
 {
-    setThreadName("SpillThreadPool");
-    LOG_INFO(logger, "start spill thread pool loop");
+    auto thread_no_str = fmt::format("thread_no={}", thread_no);
+    auto thread_logger = logger->getChild(thread_no_str);
+    setThreadName(thread_no_str.c_str());
+    LOG_INFO(thread_logger, "start loop");
     ASSERT_MEMORY_TRACKER
 
     TaskPtr task;
     while (likely(task_queue->take(task)))
     {
-        handleTask(std::move(task));
+        handleTask(std::move(task), thread_logger);
         assert(!task);
         ASSERT_MEMORY_TRACKER
     }
 
-    LOG_INFO(logger, "spill thread pool loop finished");
+    LOG_INFO(thread_logger, "loop finished");
 }
 } // namespace DB

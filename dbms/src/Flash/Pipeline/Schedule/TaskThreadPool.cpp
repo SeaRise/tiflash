@@ -14,10 +14,9 @@
 
 #include <Common/Exception.h>
 #include <Common/setThreadName.h>
-#include <Flash/Pipeline/Schedule/Task/TaskHelper.h>
-#include <Flash/Pipeline/Schedule/TaskQueue/FIFOTaskQueue.h>
-#include <Flash/Pipeline/Schedule/TaskQueue/MultiLevelFeedbackQueue.h>
-#include <Flash/Pipeline/Schedule/TaskQueue/getTaskQueue.h>
+#include <Flash/Pipeline/Schedule/Tasks/TaskHelper.h>
+#include <Flash/Pipeline/Schedule/TaskQueues/MultiLevelFeedbackQueue.h>
+#include <Flash/Pipeline/Schedule/TaskQueues/getTaskQueue.h>
 #include <Flash/Pipeline/Schedule/TaskScheduler.h>
 #include <Flash/Pipeline/Schedule/TaskThreadPool.h>
 #include <common/likely.h>
@@ -28,7 +27,7 @@ namespace DB
 TaskThreadPool::TaskThreadPool(TaskScheduler & scheduler_, const ThreadPoolConfig & config)
     : scheduler(scheduler_)
 {
-    task_queue = getTaskQueue<ExecuteMultiLevelFeedbackQueue, FIFOTaskQueue>(config.queue_type);
+    task_queue = getTaskQueue<ExecuteMultiLevelFeedbackQueue>(config.queue_type);
     auto thread_num = config.pool_size;
     RUNTIME_CHECK(thread_num > 0);
     threads.reserve(thread_num);

@@ -13,8 +13,8 @@
 // limitations under the License.
 
 #include <Common/Exception.h>
-#include <Flash/Pipeline/Schedule/Task/TaskHelper.h>
 #include <Flash/Pipeline/Schedule/TaskScheduler.h>
+#include <Flash/Pipeline/Schedule/Tasks/TaskHelper.h>
 #include <assert.h>
 #include <common/likely.h>
 
@@ -66,7 +66,7 @@ void TaskScheduler::submit(std::vector<TaskPtr> & tasks)
             task.reset();
             break;
         default:
-            RUNTIME_ASSERT(false, logger, "Unexpected task state {}", magic_enum::enum_name(status));
+            UNEXPECTED_STATUS(logger, status);
         }
     }
     tasks.clear();

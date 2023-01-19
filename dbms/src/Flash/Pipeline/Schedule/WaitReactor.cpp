@@ -29,8 +29,9 @@ namespace
 class Spinner
 {
 public:
-    Spinner(TaskThreadPool & task_thread_pool_, const LoggerPtr & logger_)
+    Spinner(TaskThreadPool & task_thread_pool_, SpillThreadPool & spill_thread_pool_, const LoggerPtr & logger_)
         : task_thread_pool(task_thread_pool_)
+        , spill_thread_pool(spill_thread_pool_)
         , logger(logger_->getChild("Spinner"))
     {}
 
@@ -42,14 +43,18 @@ public:
         auto status = task->await();
         switch (status)
         {
+        case ExecTaskStatus::RUNNING:
+            task->profile_info.elapsedAwaitTime();
+            ready_execute_tasks.push_back(std::move(task));
+            return true;
         case ExecTaskStatus::WAITING:
             return false;
-        case ExecTaskStatus::RUNNING:
-            task->profile_info.addAwaitTime();
-            ready_tasks.push_back(std::move(task));
+        case ExecTaskStatus::SPILLING:
+            task->profile_info.elapsedAwaitTime();
+            ready_spill_tasks.push_back(std::move(task));
             return true;
         case FINISH_STATUS:
-            task->profile_info.addAwaitTime();
+            task->profile_info.elapsedAwaitTime();
             task.reset();
             return true;
         default:
@@ -60,18 +65,20 @@ public:
     // return false if there are no ready task to submit.
     bool submitReadyTasks()
     {
-        if (ready_tasks.empty())
+        if (ready_execute_tasks.empty() && ready_spill_tasks.empty())
             return false;
 
-        task_thread_pool.submit(ready_tasks);
-        ready_tasks.clear();
+        task_thread_pool.submit(ready_execute_tasks);
+        ready_execute_tasks.clear();
+        spill_thread_pool.submit(ready_spill_tasks);
+        ready_spill_tasks.clear();
         spin_count = 0;
         return true;
     }
 
     void tryYield()
     {
-        assert(ready_tasks.empty());
+        assert(ready_execute_tasks.empty() && ready_spill_tasks.empty());
         ++spin_count;
 
         if (spin_count != 0 && spin_count % 64 == 0)
@@ -88,11 +95,14 @@ public:
 private:
     TaskThreadPool & task_thread_pool;
 
+    SpillThreadPool & spill_thread_pool;
+
     LoggerPtr logger;
 
     int16_t spin_count = 0;
 
-    std::vector<TaskPtr> ready_tasks;
+    std::vector<TaskPtr> ready_execute_tasks;
+    std::vector<TaskPtr> ready_spill_tasks;
 };
 } // namespace
 
@@ -129,7 +139,7 @@ void WaitReactor::loop() noexcept
     LOG_INFO(logger, "start wait reactor loop");
     ASSERT_MEMORY_TRACKER
 
-    Spinner spinner{scheduler.task_thread_pool, logger};
+    Spinner spinner{scheduler.task_thread_pool, scheduler.spill_thread_pool, logger};
     std::list<TaskPtr> local_waiting_tasks;
     // Get the incremental tasks from waiting_task_list.
     // return false if waiting_task_list has been closed.

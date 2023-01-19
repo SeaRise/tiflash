@@ -49,17 +49,12 @@ void SpillThreadPool::waitForStop()
     LOG_INFO(logger, "spill thread pool is stopped");
 }
 
-void SpillThreadPool::submit(TaskPtr && task)
-{
-    task_queue->submit(std::move(task));
-}
-
 void SpillThreadPool::handleTask(TaskPtr && task, const LoggerPtr & log)
 {
     assert(task);
     TRACE_MEMORY(task);
 
-    task->profile_info.addSpillPendingTime();
+    task->profile_info.elapsedSpillPendingTime();
     UInt64 total_time_spent = 0;
     ExecTaskStatus status;
     while (true)
@@ -78,6 +73,9 @@ void SpillThreadPool::handleTask(TaskPtr && task, const LoggerPtr & log)
     {
     case ExecTaskStatus::RUNNING:
         scheduler.task_thread_pool.submit(std::move(task));
+        break;
+    case ExecTaskStatus::WAITING:
+        scheduler.wait_reactor.submit(std::move(task));
         break;
     case ExecTaskStatus::SPILLING:
         submit(std::move(task));
@@ -107,5 +105,15 @@ void SpillThreadPool::loop(size_t thread_no) noexcept
     }
 
     LOG_INFO(thread_logger, "loop finished");
+}
+
+void SpillThreadPool::submit(TaskPtr && task)
+{
+    task_queue->submit(std::move(task));
+}
+
+void SpillThreadPool::submit(std::vector<TaskPtr> & tasks)
+{
+    task_queue->submit(tasks);
 }
 } // namespace DB

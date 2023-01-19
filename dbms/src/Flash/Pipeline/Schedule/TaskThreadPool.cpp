@@ -71,7 +71,7 @@ void TaskThreadPool::handleTask(TaskPtr & task, const LoggerPtr & log)
     assert(task);
     TRACE_MEMORY(task);
 
-    task->profile_info.addExecutePendingTime();
+    task->profile_info.elapsedExecutePendingTime();
     UInt64 total_time_spent = 0;
     ExecTaskStatus status;
     while (true)

@@ -39,13 +39,13 @@ public:
 
     void addExecuteTime(UInt64 value);
 
-    void addExecutePendingTime();
+    void elapsedExecutePendingTime();
 
     void addSpillTime(UInt64 value);
 
-    void addSpillPendingTime();
+    void elapsedSpillPendingTime();
 
-    void addAwaitTime();
+    void elapsedAwaitTime();
 
     String toJson() const;
 

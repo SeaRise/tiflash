@@ -16,9 +16,9 @@
 
 #include <Common/Logger.h>
 #include <Flash/Pipeline/Schedule/SpillThreadPool.h>
-#include <Flash/Pipeline/Schedule/Tasks/Task.h>
 #include <Flash/Pipeline/Schedule/TaskQueues/TaskQueueType.h>
 #include <Flash/Pipeline/Schedule/TaskThreadPool.h>
+#include <Flash/Pipeline/Schedule/Tasks/Task.h>
 #include <Flash/Pipeline/Schedule/WaitReactor.h>
 
 namespace DB

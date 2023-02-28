@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <Common/ThresholdUtils.h>
 #include <Common/Logger.h>
 #include <Flash/Coprocessor/DAGContext.h>
 #include <Flash/Coprocessor/DAGExpressionAnalyzer.h>
@@ -76,8 +77,18 @@ void PhysicalTopN::buildPipelineExec(PipelineExecGroupBuilder & group_builder, C
             builder.appendTransformOp(std::make_unique<ExpressionTransformOp>(group_builder.exec_status, before_sort_actions, log->identifier()));
         });
     }
+    const Settings & settings = context.getSettingsRef();
+    auto average_threshold = getAverageThreshold(settings.max_bytes_before_external_sort, pipeline.streams.size());
+    SpillConfig spill_config = {context.getTemporaryPath(), fmt::format("{}_sort", log->identifier()), settings.max_cached_data_bytes_in_spiller, settings.max_spilled_rows_per_file, settings.max_spilled_bytes_per_file, context.getFileProvider()};
     group_builder.transform([&](auto & builder) {
-        builder.appendTransformOp(std::make_unique<TopNTransformOp>(group_builder.exec_status, order_descr, limit, context.getSettingsRef().max_block_size, log->identifier()));
+        builder.appendTransformOp(std::make_unique<TopNTransformOp>(
+            group_builder.exec_status, 
+            order_descr, 
+            limit, 
+            settings.max_block_size, 
+            average_threshold,
+            spill_config,
+            log->identifier()));
     });
 }
 

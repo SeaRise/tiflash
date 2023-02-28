@@ -18,9 +18,20 @@
 #include <Core/SortDescription.h>
 #include <DataStreams/IBlockInputStream.h>
 #include <Operators/Operator.h>
+#include <Core/Spiller.h>
 
 namespace DB
 {
+class TopNStatus
+{
+    INIT,
+    ONLY_LIMIT_OUTPUT,
+    PARTIAL,
+    MERGE,
+    SPILL,
+    RESTORE,
+}
+
 class TopNTransformOp : public TransformOp
 {
 public:
@@ -29,14 +40,9 @@ public:
         const SortDescription & order_desc_,
         size_t limit_,
         size_t max_block_size_,
-        const String & req_id_)
-        : TransformOp(exec_status_)
-        , log(Logger::get(req_id_))
-        , order_desc(order_desc_)
-        , limit(limit_)
-        , max_block_size(max_block_size_)
-        , req_id(req_id_)
-    {}
+        size_t max_bytes_before_external_sort_,
+        const SpillConfig & spill_config_,
+        const String & req_id_);
 
     String getName() const override
     {
@@ -49,14 +55,26 @@ protected:
 
     void transformHeaderImpl(Block & header_) override;
 
-
 private:
     const LoggerPtr log;
+
     SortDescription order_desc;
     size_t limit;
     size_t max_block_size;
-    String req_id;
+
+    size_t max_bytes_before_external_sort;
+    const SpillConfig spill_config;
+
+    Block header_without_constants;
+
     Blocks blocks;
+    size_t sum_bytes_in_blocks = 0;
+
+    /// Everything below is for external sorting.
+    std::unique_ptr<Spiller> spiller;
+
     std::unique_ptr<IBlockInputStream> impl;
+
+    TopNStatus status{INIT};
 };
 } // namespace DB

@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <Core/Block.h>
 #include <DataStreams/IBlockInputStream.h>
 #include <Interpreters/Join.h>
-#include <Core/Block.h>
 
 #include <memory>
 
@@ -28,7 +28,7 @@ using HashJoinProbeExecPtr = std::shared_ptr<HashJoinProbeExec>;
 class HashJoinProbeExec
 {
 public:
-    static HashJoinProbeExecPtr build(const JoinPtr & join, const BlockInputStreamPtr & probe_stream,  size_t non_joined_stream_index, UInt64 max_block_size);
+    static HashJoinProbeExecPtr build(const JoinPtr & join, const BlockInputStreamPtr & probe_stream, size_t non_joined_stream_index, UInt64 max_block_size);
     static HashJoinProbeExecPtr buildForRestore(const JoinPtr & join, const BlockInputStreamPtr & restore_build_stream, const BlockInputStreamPtr & probe_stream, const BlockInputStreamPtr & non_joined_stream);
 
     HashJoinProbeExec(
@@ -73,4 +73,4 @@ private:
     size_t non_joined_stream_index;
     BlockInputStreamPtr non_joined_stream;
 };
-}
+} // namespace DB

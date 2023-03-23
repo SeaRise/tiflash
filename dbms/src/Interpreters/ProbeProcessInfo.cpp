@@ -32,4 +32,4 @@ void ProbeProcessInfo::updateStartRow()
     assert(start_row <= end_row);
     start_row = end_row;
 }
-}
+} // namespace DB

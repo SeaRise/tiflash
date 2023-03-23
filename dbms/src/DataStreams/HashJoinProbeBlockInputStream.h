@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include <DataStreams/IProfilingBlockInputStream.h>
 #include <DataStreams/HashJoinProbeExec.h>
+#include <DataStreams/IProfilingBlockInputStream.h>
 #include <Interpreters/Join.h>
 
 namespace DB

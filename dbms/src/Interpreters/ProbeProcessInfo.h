@@ -35,4 +35,4 @@ struct ProbeProcessInfo
     void resetBlock(Block && block_, size_t partition_index_ = 0);
     void updateStartRow();
 };
-}
+} // namespace DB

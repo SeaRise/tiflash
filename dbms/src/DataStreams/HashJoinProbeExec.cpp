@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <DataStreams/NonJoinedBlockInputStream.h>
-#include <DataStreams/IProfilingBlockInputStream.h>
 #include <DataStreams/HashJoinProbeExec.h>
+#include <DataStreams/IProfilingBlockInputStream.h>
+#include <DataStreams/NonJoinedBlockInputStream.h>
 
 namespace DB
 {
@@ -145,4 +145,4 @@ const JoinPtr & HashJoinProbeExec::getJoin()
     assert(join);
     return join;
 }
-}
+} // namespace DB

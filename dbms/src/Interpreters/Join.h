@@ -25,6 +25,7 @@
 #include <Flash/Coprocessor/JoinInterpreterHelper.h>
 #include <Interpreters/AggregationCommon.h>
 #include <Interpreters/ExpressionActions.h>
+#include <Interpreters/ProbeProcessInfo.h>
 #include <Interpreters/SettingsCommon.h>
 #include <Parsers/ASTTablesInSelectQuery.h>
 #include <absl/base/optimization.h>
@@ -33,7 +34,6 @@
 
 namespace DB
 {
-struct ProbeProcessInfo;
 struct RestoreInfo;
 
 /** Data structure for implementation of JOIN.
@@ -586,23 +586,6 @@ struct RestoreInfo
         , non_joined_stream(non_joined_data_stream_)
         , build_stream(build_stream_)
         , probe_stream(probe_stream_){};
-};
-
-struct ProbeProcessInfo
-{
-    Block block;
-    size_t partition_index;
-    UInt64 max_block_size;
-    size_t start_row;
-    size_t end_row;
-    bool all_rows_joined_finish;
-
-    explicit ProbeProcessInfo(UInt64 max_block_size_)
-        : max_block_size(max_block_size_)
-        , all_rows_joined_finish(true){};
-
-    void resetBlock(Block && block_, size_t partition_index_ = 0);
-    void updateStartRow();
 };
 
 void convertColumnToNullable(ColumnWithTypeAndName & column);

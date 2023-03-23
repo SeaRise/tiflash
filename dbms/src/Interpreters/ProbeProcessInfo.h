@@ -1,4 +1,4 @@
-// Copyright 2022 PingCAP, Ltd.
+// Copyright 2023 PingCAP, Ltd.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,33 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
-
 #include <Core/Block.h>
+
+#pragma once
 
 namespace DB
 {
-
-class SquashingHashJoinBlockTransform
+struct ProbeProcessInfo
 {
-public:
-    SquashingHashJoinBlockTransform(UInt64 max_block_size_);
-
-    void appendBlock(Block & block);
-    Block getFinalOutputBlock();
-    bool isJoinFinished() const;
-    bool needAppendBlock() const;
-
-
-private:
-    void handleOverLimitBlock();
-    void reset();
-
-    Blocks blocks;
-    std::optional<Block> over_limit_block;
-    size_t output_rows;
+    Block block;
+    size_t partition_index;
     UInt64 max_block_size;
-    bool join_finished;
-};
+    size_t start_row;
+    size_t end_row;
+    bool all_rows_joined_finish;
 
-} // namespace DB
+    explicit ProbeProcessInfo(UInt64 max_block_size_)
+        : max_block_size(max_block_size_)
+        , all_rows_joined_finish(true)
+    {}
+
+    void resetBlock(Block && block_, size_t partition_index_ = 0);
+    void updateStartRow();
+};
+}

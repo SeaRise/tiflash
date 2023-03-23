@@ -3342,21 +3342,4 @@ void Join::releaseAllPartitions()
         }
     }
 }
-
-void ProbeProcessInfo::resetBlock(Block && block_, size_t partition_index_)
-{
-    block = std::move(block_);
-    partition_index = partition_index_;
-    start_row = 0;
-    end_row = 0;
-    all_rows_joined_finish = false;
-    // If the probe block size is greater than max_block_size, we will set max_block_size to the probe block size to avoid some unnecessary split.
-    max_block_size = std::max(max_block_size, block.rows());
-}
-
-void ProbeProcessInfo::updateStartRow()
-{
-    assert(start_row <= end_row);
-    start_row = end_row;
-}
 } // namespace DB

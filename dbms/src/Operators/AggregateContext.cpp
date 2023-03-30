@@ -41,7 +41,8 @@ void AggregateContext::initBuild(const Aggregator::Params & params, size_t max_t
 void AggregateContext::buildOnBlock(size_t task_index, const Block & block)
 {
     RUNTIME_CHECK(inited_build && !inited_convergent);
-    aggregator->executeOnBlock(block, *many_data[task_index], threads_data[task_index]->key_columns, threads_data[task_index]->aggregate_columns);
+    auto & data = *many_data[task_index];
+    aggregator->executeOnBlock(block, data, threads_data[task_index]->key_columns, threads_data[task_index]->aggregate_columns);
     threads_data[task_index]->src_bytes += block.bytes();
     threads_data[task_index]->src_rows += block.rows();
 }

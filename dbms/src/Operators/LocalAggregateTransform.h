@@ -23,6 +23,7 @@ enum class LocalAggStatus
 {
     build,
     convert,
+    restore,
 };
 
 /// Only do build and convert at the current operator, no sharing of objects with other operators.
@@ -44,6 +45,8 @@ protected:
 
     OperatorStatus tryOutputImpl(Block & block) override;
 
+    OperatorStatus executeIOImpl() override;
+
     void transformHeaderImpl(Block & header_) override;
 
 private:
@@ -51,5 +54,7 @@ private:
     AggregateContext agg_context;
 
     LocalAggStatus status{LocalAggStatus::build};
+
+    std::vector<std::function<void()>> io_funcs;
 };
 } // namespace DB

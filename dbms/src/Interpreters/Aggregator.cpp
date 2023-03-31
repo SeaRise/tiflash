@@ -65,17 +65,20 @@ AggregatedDataVariants::~AggregatedDataVariants()
     destroyAggregationMethodImpl();
 }
 
-void AggregatedDataVariants::tryMarkNeedSpill()
+bool AggregatedDataVariants::tryMarkNeedSpill()
 {
     assert(!need_spill);
+    if (empty())
+        return false;
     if (!isTwoLevel())
     {
         /// Data can only be flushed to disk if a two-level aggregation is supported.
         if (!isConvertibleToTwoLevel())
-            return;
+            return false;
         convertToTwoLevel();
     }
     need_spill = true;
+    return true;
 }
 
 void AggregatedDataVariants::destroyAggregationMethodImpl()

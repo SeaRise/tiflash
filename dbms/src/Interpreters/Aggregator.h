@@ -674,7 +674,7 @@ struct AggregatedDataVariants : private boost::noncopyable
 
     bool need_spill = false;
 
-    void tryMarkNeedSpill();
+    bool tryMarkNeedSpill();
 
     void destroyAggregationMethodImpl();
 

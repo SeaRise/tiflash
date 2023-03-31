@@ -15,6 +15,8 @@
 #include <Flash/Executor/PipelineExecutorStatus.h>
 #include <Operators/LocalAggregateTransform.h>
 
+#include <magic_enum.hpp>
+
 namespace DB
 {
 namespace
@@ -44,21 +46,38 @@ OperatorStatus LocalAggregateTransform::transformImpl(Block & block)
     case LocalAggStatus::build:
         if (unlikely(!block))
         {
-            // status from build to convert.
-            status = LocalAggStatus::convert;
-            agg_context.initConvergent();
-            if likely (!agg_context.useNullSource())
+            if (!agg_context.hasSpilledData())
             {
-                RUNTIME_CHECK(agg_context.getConvergentConcurrency() == local_concurrency);
-                block = agg_context.readForConvergent(task_index);
+                // status from build to convert.
+                status = LocalAggStatus::convert;
+                agg_context.initConvergent();
+                if likely (!agg_context.useNullSource())
+                {
+                    RUNTIME_CHECK(agg_context.getConvergentConcurrency() == local_concurrency);
+                    block = agg_context.readForConvergent(task_index);
+                }
+                return OperatorStatus::HAS_OUTPUT;
             }
-            return OperatorStatus::HAS_OUTPUT;
+            else
+            {
+                // status from build to restore.
+                status = LocalAggStatus::restore;
+                if (auto func = agg_context.trySpill(task_index, /*mark_need_spill=*/true); func)
+                    io_funcs.push_back(std::move(*func));
+                // xxxx
+                return OperatorStatus::IO;
+            }
         }
         agg_context.buildOnBlock(task_index, block);
         block.clear();
+        if (auto func = agg_context.trySpill(task_index); func)
+        {
+            io_funcs.push_back(std::move(*func));
+            return OperatorStatus::IO;
+        }
         return OperatorStatus::NEED_INPUT;
-    case LocalAggStatus::convert:
-        throw Exception("Unexpected status: convert");
+    default:
+        throw Exception(fmt::format("Unexpected status: {}", magic_enum::enum_name(status)));
     }
 }
 
@@ -72,7 +91,28 @@ OperatorStatus LocalAggregateTransform::tryOutputImpl(Block & block)
         if likely (!agg_context.useNullSource())
             block = agg_context.readForConvergent(task_index);
         return OperatorStatus::HAS_OUTPUT;
+    case LocalAggStatus::restore:
+        if (restore_data.empty())
+        {
+            io_func.push_back(restore_func)
+            return io_status;
+        }
+        else
+        {
+            // restore_data --> block
+            return OperatorStatus::HAS_OUTPUT;
+        }
     }
+}
+
+OperatorStatus LocalAggregateTransform::executeIOImpl()
+{
+    for (auto & io_func : io_funcs)
+        io_func();
+    io_funcs.clear();
+    return status == LocalAggStatus::build
+        ? OperatorStatus::NEED_INPUT
+        : OperatorStatus::HAS_OUTPUT;
 }
 
 void LocalAggregateTransform::transformHeaderImpl(Block & header_)

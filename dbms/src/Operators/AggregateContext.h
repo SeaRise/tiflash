@@ -50,6 +50,10 @@ public:
 
     void buildOnBlock(size_t task_index, const Block & block);
 
+    std::optional<std::function<void()>> trySpill(size_t task_index, bool mark_need_spill = false);
+
+    bool hasSpilledData();
+
     void initConvergent();
 
     // Called before convergent to trace aggregate statistics and handle empty table with result case.

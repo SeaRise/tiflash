@@ -152,11 +152,7 @@ void ParallelAggregatingBlockInputStream::Handler::onFinishThread(size_t thread_
     {
         /// Flush data in the RAM to disk. So it's easier to unite them later.
         auto & data = *parent.many_data[thread_num];
-
-        if (data.isConvertibleToTwoLevel())
-            data.convertToTwoLevel();
-
-        if (!data.empty())
+        if (data.tryMarkNeedSpill())
             parent.aggregator.spill(data);
     }
 }
@@ -169,10 +165,7 @@ void ParallelAggregatingBlockInputStream::Handler::onFinish()
         ///  because at the time of `onFinishThread` call, no data has been flushed to disk, and then some were.
         for (auto & data : parent.many_data)
         {
-            if (data->isConvertibleToTwoLevel())
-                data->convertToTwoLevel();
-
-            if (!data->empty())
+            if (data->tryMarkNeedSpill())
                 parent.aggregator.spill(*data);
         }
     }

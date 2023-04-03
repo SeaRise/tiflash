@@ -47,10 +47,10 @@ void AggregateContext::buildOnBlock(size_t task_index, const Block & block)
     threads_data[task_index]->src_rows += block.rows();
 }
 
-std::optional<std::function<void()>> AggregateContext::trySpill(size_t task_index, bool mark_need_spill)
+std::optional<std::function<void()>> AggregateContext::trySpill(size_t task_index, bool try_mark_need_spill)
 {
     auto & data = *many_data[task_index];
-    if (mark_need_spill)
+    if (try_mark_need_spill)
         data.tryMarkNeedSpill();
     if (data.need_spill)
         return [&]() { aggregator->spill(data); };
@@ -62,7 +62,7 @@ bool AggregateContext::hasSpilledData()
     return aggregator->hasSpilledData();
 }
 
-void AggregateContext::initConvergentPrefix()
+void AggregateContext::prepareForNonSpilled()
 {
     assert(build_watch);
     double elapsed_seconds = build_watch->elapsedSeconds();
@@ -101,22 +101,35 @@ void AggregateContext::initConvergentPrefix()
             threads_data[0]->aggregate_columns);
 }
 
-void AggregateContext::initConvergent()
+void AggregateContext::initConvergent(PipelineExecutorStatus & status)
 {
     RUNTIME_CHECK(inited_build && !inited_convergent);
 
-    initConvergentPrefix();
+    if (!aggregator->hasSpilledData())
+    {
+        prepareForNonSpilled();
 
-    merging_buckets = aggregator->mergeAndConvertToBlocks(many_data, true, max_threads);
-    inited_convergent = true;
-    RUNTIME_CHECK(!merging_buckets || merging_buckets->getConcurrency() > 0);
+        merging_buckets = aggregator->mergeAndConvertToBlocks(many_data, true, max_threads);
+        inited_convergent = true;
+        RUNTIME_CHECK(!merging_buckets || merging_buckets->getConcurrency() > 0);
+    }
+    else
+    {
+        aggregator.finishSpill();
+        BlockInputStreams input_streams = aggregator.restoreSpilledData();
+        RUNTIME_CHECK(input_streams.empty());
+        loader = std::make_shared<AggregateLoader>(input_streams, getHeader(), status, log->identifier());
+    }
 }
 
 size_t AggregateContext::getConvergentConcurrency()
 {
     RUNTIME_CHECK(inited_convergent);
-
-    return isTwoLevel() ? merging_buckets->getConcurrency() : 1;
+    if (merging_buckets)
+        return merging_buckets->getConcurrency();
+    if (loader)
+        return max_threads;
+    return 1;
 }
 
 Block AggregateContext::getHeader() const
@@ -125,16 +138,10 @@ Block AggregateContext::getHeader() const
     return aggregator->getHeader(true);
 }
 
-bool AggregateContext::isTwoLevel()
-{
-    RUNTIME_CHECK(inited_build);
-    return many_data[0]->isTwoLevel();
-}
-
 bool AggregateContext::useNullSource()
 {
     RUNTIME_CHECK(inited_convergent);
-    return !merging_buckets;
+    return !merging_buckets && !loader;
 }
 
 Block AggregateContext::readForConvergent(size_t index)

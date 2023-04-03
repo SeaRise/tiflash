@@ -18,6 +18,7 @@
 #include <Common/Stopwatch.h>
 #include <Interpreters/Aggregator.h>
 #include <Operators/Operator.h>
+#include <Operators/AggregateLoader.h>
 
 namespace DB
 {
@@ -36,6 +37,8 @@ struct ThreadData
     }
 };
 
+class PipelineExecutorStatus;
+
 /// Aggregated data shared between AggBuild and AggConvergent Pipeline.
 class AggregateContext
 {
@@ -50,14 +53,16 @@ public:
 
     void buildOnBlock(size_t task_index, const Block & block);
 
-    std::optional<std::function<void()>> trySpill(size_t task_index, bool mark_need_spill = false);
+    std::optional<std::function<void()>> trySpill(size_t task_index, bool try_mark_need_spill = false);
 
     bool hasSpilledData();
 
-    void initConvergent();
+    void initConvergent(PipelineExecutorStatus & status);
+
+    void initLoader(PipelineExecutorStatus & status);
 
     // Called before convergent to trace aggregate statistics and handle empty table with result case.
-    void initConvergentPrefix();
+    void prepareForNonSpilled();
 
     size_t getConvergentConcurrency();
 
@@ -78,11 +83,15 @@ private:
     std::atomic_bool inited_build = false;
     std::atomic_bool inited_convergent = false;
 
-    MergingBucketsPtr merging_buckets;
     ManyAggregatedDataVariants many_data;
     // use unique_ptr to avoid false sharing.
     std::vector<std::unique_ptr<ThreadData>> threads_data;
     size_t max_threads{};
+
+    // for merging non-spilled data merge
+    MergingBucketsPtr merging_buckets;
+    // for loading spilled data
+    AggregateLoaderPtr loader;
 
     const LoggerPtr log;
 

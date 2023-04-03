@@ -29,7 +29,7 @@ void PhysicalAggregationConvergent::buildPipelineExecGroup(
     // So only non fine grained shuffle is considered here.
     assert(!fine_grained_shuffle.enable());
 
-    aggregate_context->initConvergent();
+    aggregate_context->initConvergent(exec_status);
 
     if (unlikely(aggregate_context->useNullSource()))
     {

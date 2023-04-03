@@ -39,6 +39,13 @@ LocalAggregateTransform::LocalAggregateTransform(
     agg_context.initBuild(params, local_concurrency, /*hook=*/[&]() { return exec_status.isCancelled(); });
 }
 
+bool LocalAggregateTransform::tryLoad()
+{
+    if (!blocks_to_merge.empty())
+        return true;
+    return agg_context.tryLoad(blocks_to_merge);
+}
+
 OperatorStatus LocalAggregateTransform::transformImpl(Block & block)
 {
     switch (status)
@@ -46,11 +53,11 @@ OperatorStatus LocalAggregateTransform::transformImpl(Block & block)
     case LocalAggStatus::build:
         if (unlikely(!block))
         {
+            agg_context.initConvergent(exec_status);
             if (!agg_context.hasSpilledData())
             {
                 // status from build to convert.
                 status = LocalAggStatus::convert;
-                agg_context.initConvergent();
                 if likely (!agg_context.useNullSource())
                 {
                     RUNTIME_CHECK(agg_context.getConvergentConcurrency() == local_concurrency);
@@ -62,17 +69,32 @@ OperatorStatus LocalAggregateTransform::transformImpl(Block & block)
             {
                 // status from build to restore.
                 status = LocalAggStatus::restore;
-                if (auto func = agg_context.trySpill(task_index, /*mark_need_spill=*/true); func)
-                    io_funcs.push_back(std::move(*func));
-                // xxxx
-                return OperatorStatus::IO;
+                if (auto func = agg_context.trySpill(task_index, /*try_mark_need_spill=*/true); func)
+                {
+                    spill_funcs.push_back(std::move(*func));
+                    return OperatorStatus::IO;
+                }
+                else
+                {
+                    if (tryLoad())
+                    {
+                        if (!blocks_to_merge.empty())
+                        {
+                            cur_result = agg_context.merge(blocks_to_merge);
+                            block = popBlocksListFront(current_result);
+                        }
+                        return OperatorStatus::HAS_OUTPUT;
+                    }
+                    return OperatorStatus::WAITING;
+                }
+                // restore xxx
             }
         }
         agg_context.buildOnBlock(task_index, block);
         block.clear();
         if (auto func = agg_context.trySpill(task_index); func)
         {
-            io_funcs.push_back(std::move(*func));
+            spill_funcs.push_back(std::move(*func));
             return OperatorStatus::IO;
         }
         return OperatorStatus::NEED_INPUT;
@@ -92,24 +114,29 @@ OperatorStatus LocalAggregateTransform::tryOutputImpl(Block & block)
             block = agg_context.readForConvergent(task_index);
         return OperatorStatus::HAS_OUTPUT;
     case LocalAggStatus::restore:
-        if (restore_data.empty())
+        block = popBlocksListFront(current_result);
+        if (!block)
         {
-            io_func.push_back(restore_func)
-            return io_status;
+            if (tryLoad())
+            {
+                if (!blocks_to_merge.empty())
+                {
+                    cur_result = agg_context.merge(blocks_to_merge);
+                    block = popBlocksListFront(current_result);
+                }
+                return OperatorStatus::HAS_OUTPUT;
+            }
+            return OperatorStatus::WAITING;
         }
-        else
-        {
-            // restore_data --> block
-            return OperatorStatus::HAS_OUTPUT;
-        }
+        return OperatorStatus::HAS_OUTPUT;
     }
 }
 
 OperatorStatus LocalAggregateTransform::executeIOImpl()
 {
-    for (auto & io_func : io_funcs)
-        io_func();
-    io_funcs.clear();
+    for (auto & spill_func : spill_funcs)
+        spill_func();
+    spill_funcs.clear();
     return status == LocalAggStatus::build
         ? OperatorStatus::NEED_INPUT
         : OperatorStatus::HAS_OUTPUT;

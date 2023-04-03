@@ -50,11 +50,18 @@ protected:
     void transformHeaderImpl(Block & header_) override;
 
 private:
+    bool tryLoad();
+
+private:
     Aggregator::Params params;
     AggregateContext agg_context;
 
     LocalAggStatus status{LocalAggStatus::build};
 
-    std::vector<std::function<void()>> io_funcs;
+    // for spill
+    std::vector<std::function<void()>> spill_funcs;
+    // for restore
+    BlocksList blocks_to_merge;
+    BlocksList cur_result;
 };
 } // namespace DB

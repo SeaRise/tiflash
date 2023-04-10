@@ -43,6 +43,8 @@ public:
 protected:
     OperatorStatus writeImpl(Block && block) override;
 
+    OperatorStatus executeIOImpl() override;
+
 private:
     size_t index{};
     uint64_t total_rows{};

@@ -25,6 +25,14 @@ OperatorStatus AggregateBuildSinkOp::writeImpl(Block && block)
     agg_context->buildOnBlock(index, block);
     total_rows += block.rows();
     block.clear();
+    return agg_context.needSpill(index)
+        ? OperatorStatus::IO
+        : OperatorStatus::NEED_INPUT;
+}
+
+OperatorStatus AggregateBuildSinkOp::executeIOImpl() override
+{
+    agg_context.spillData(index);
     return OperatorStatus::NEED_INPUT;
 }
 

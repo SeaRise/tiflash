@@ -15,6 +15,7 @@
 #pragma once
 
 #include <Flash/Coprocessor/DAGStorageInterpreter.h>
+#include <Flash/Coprocessor/StorageDisaggregatedInterpreter.h>
 #include <Flash/Coprocessor/FilterConditions.h>
 #include <Flash/Coprocessor/TiDBTableScan.h>
 #include <Flash/Planner/Plans/PhysicalLeaf.h>
@@ -53,7 +54,7 @@ public:
         PipelineExecutorStatus & exec_status,
         PipelineExecGroupBuilder & group_builder,
         Context & context,
-        size_t concurrency) override;
+        size_t) override;
 
     // generate sourceOps in compile time
     void buildPipeline(
@@ -75,7 +76,10 @@ private:
 
     TiDBTableScan tidb_table_scan;
 
-    std::unique_ptr<DAGStorageInterpreter> storage_interpreter;
+    // for local read
+    std::unique_ptr<DAGStorageInterpreter> local_storage_interpreter;
+    // for disaggregated read
+    std::unique_ptr<StorageDisaggregatedInterpreter> disaggregated_storage_interpreter;
 
     Block sample_block;
 

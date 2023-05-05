@@ -17,7 +17,6 @@
 #include <Flash/Coprocessor/DAGStorageInterpreter.h>
 #include <Flash/Coprocessor/GenSchemaAndColumn.h>
 #include <Flash/Coprocessor/InterpreterUtils.h>
-#include <Flash/Coprocessor/StorageDisaggregatedInterpreter.h>
 #include <Flash/Pipeline/Exec/PipelineExecBuilder.h>
 #include <Flash/Planner/FinalizeHelper.h>
 #include <Flash/Planner/PhysicalPlanHelper.h>
@@ -60,15 +59,15 @@ void PhysicalTableScan::buildBlockInputStreamImpl(DAGPipeline & pipeline, Contex
 
     if (context.getSharedContextDisagg()->isDisaggregatedComputeMode())
     {
-        StorageDisaggregatedInterpreter disaggregated_tiflash_interpreter(context, tidb_table_scan, filter_conditions, max_streams);
-        disaggregated_tiflash_interpreter.execute(pipeline);
-        buildProjection(pipeline, disaggregated_tiflash_interpreter.analyzer->getCurrentInputColumns());
+        disaggregated_storage_interpreter = std::make_unique<StorageDisaggregatedInterpreter>(context, tidb_table_scan, filter_conditions, max_streams);
+        disaggregated_storage_interpreter->execute(pipeline);
+        buildProjection(pipeline, disaggregated_storage_interpreter->analyzer->getCurrentInputColumns());
     }
     else
     {
-        DAGStorageInterpreter storage_interpreter(context, tidb_table_scan, filter_conditions, max_streams);
-        storage_interpreter.execute(pipeline);
-        buildProjection(pipeline, storage_interpreter.analyzer->getCurrentInputColumns());
+        local_storage_interpreter = std::make_unique<DAGStorageInterpreter>(context, tidb_table_scan, filter_conditions, max_streams);
+        local_storage_interpreter->execute(pipeline);
+        buildProjection(pipeline, local_storage_interpreter->analyzer->getCurrentInputColumns());
     }
 }
 
@@ -77,19 +76,31 @@ void PhysicalTableScan::buildPipeline(
     Context & context,
     PipelineExecutorStatus & exec_status)
 {
-    storage_interpreter = std::make_unique<DAGStorageInterpreter>(
-        context,
-        tidb_table_scan,
-        filter_conditions,
-        context.getMaxStreams());
-    source_ops = storage_interpreter->execute(exec_status);
+    if (context.getSharedContextDisagg()->isDisaggregatedComputeMode())
+    {
+        disaggregated_storage_interpreter = std::make_unique<StorageDisaggregatedInterpreter>(
+            context,
+            tidb_table_scan,
+            filter_conditions,
+            context.getMaxStreams());
+        source_ops = disaggregated_storage_interpreter->execute(exec_status);
+    }
+    else
+    {
+        local_storage_interpreter = std::make_unique<DAGStorageInterpreter>(
+            context,
+            tidb_table_scan,
+            filter_conditions,
+            context.getMaxStreams());
+        source_ops = local_storage_interpreter->execute(exec_status);
+    }
     PhysicalPlanNode::buildPipeline(builder, context, exec_status);
 }
 
 void PhysicalTableScan::buildPipelineExecGroup(
     PipelineExecutorStatus & exec_status,
     PipelineExecGroupBuilder & group_builder,
-    Context &,
+    Context & context,
     size_t)
 {
     group_builder.init(source_ops.size());
@@ -97,8 +108,18 @@ void PhysicalTableScan::buildPipelineExecGroup(
     group_builder.transform([&](auto & builder) {
         builder.setSourceOp(std::move(source_ops[i++]));
     });
-    storage_interpreter->executeSuffix(exec_status, group_builder);
-    buildProjection(exec_status, group_builder, storage_interpreter->analyzer->getCurrentInputColumns());
+
+    if (context.getSharedContextDisagg()->isDisaggregatedComputeMode())
+    {
+        assert(disaggregated_storage_interpreter);
+        buildProjection(exec_status, group_builder, disaggregated_storage_interpreter->analyzer->getCurrentInputColumns());
+    }
+    else
+    {
+        assert(local_storage_interpreter);
+        local_storage_interpreter->executeSuffix(exec_status, group_builder);
+        buildProjection(exec_status, group_builder, local_storage_interpreter->analyzer->getCurrentInputColumns());
+    }
 }
 
 void PhysicalTableScan::buildProjection(DAGPipeline & pipeline, const NamesAndTypes & storage_schema)

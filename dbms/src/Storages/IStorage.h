@@ -21,6 +21,7 @@
 #include <Storages/ITableDeclaration.h>
 #include <Storages/SelectQueryInfo.h>
 #include <Storages/TableLockHolder.h>
+#include <Operators/SourceOp_fwd.h>
 
 #include <memory>
 #include <optional>
@@ -48,6 +49,7 @@ struct Settings;
 
 class AlterCommands;
 
+class PipelineExecutorStatus;
 
 /** Storage. Responsible for
   * - storage of the table data;
@@ -143,6 +145,19 @@ public:
                                    unsigned /*num_streams*/)
     {
         throw Exception("Method read is not supported by storage " + getName(), ErrorCodes::NOT_IMPLEMENTED);
+    }
+
+    virtual SourceOps readSourceOps(
+        PipelineExecutorStatus &,
+        const Names &,
+        const SelectQueryInfo &,
+        const Context &,
+        size_t,
+        unsigned)
+    {
+        throw Exception(
+            fmt::format("Method readSourceOps is not supported by storage {}", getName()),
+            ErrorCodes::NOT_IMPLEMENTED);
     }
 
     /** Writes the data to a table.

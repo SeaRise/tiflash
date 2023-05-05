@@ -15,6 +15,7 @@
 #pragma once
 
 #include <Flash/Coprocessor/DAGExpressionAnalyzer.h>
+#include <Flash/Pipeline/Exec/PipelineExecBuilder.h>
 #include <Flash/Coprocessor/DAGPipeline.h>
 #include <Flash/Coprocessor/FilterConditions.h>
 #include <Interpreters/Context_fwd.h>
@@ -22,7 +23,6 @@
 
 namespace DB
 {
-
 // For TableScan in disaggregated tiflash mode,
 // we convert it to ExchangeReceiver(executed in tiflash_compute node),
 // and ExchangeSender + TableScan(executed in tiflash_storage node).
@@ -44,6 +44,13 @@ public:
         auto stage = QueryProcessingStage::Enum::FetchColumns;
         pipeline.streams = storage->read(Names(), SelectQueryInfo(), context, stage, 0, max_streams);
         analyzer = std::move(storage->analyzer);
+    }
+
+    SourceOps execute(PipelineExecutorStatus & exec_status)
+    {
+        auto source_ops = storage->readSourceOps(exec_status, Names(), SelectQueryInfo(), context, 0, max_streams);
+        analyzer = std::move(storage->analyzer);
+        return source_ops;
     }
 
     // Members will be transferred to DAGQueryBlockInterpreter after execute

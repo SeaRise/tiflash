@@ -30,6 +30,7 @@
 #include <Interpreters/Quota.h>
 #include <Interpreters/SharedContexts/Disagg.h>
 #include <Interpreters/executeQuery.h>
+#include <Storages/S3/S3Common.h>
 
 namespace ProfileEvents
 {
@@ -164,7 +165,7 @@ QueryExecutorPtr queryExecute(Context & context, bool internal)
 {
     if (context.getSettingsRef().enable_planner
         && context.getSettingsRef().enable_pipeline
-        && context.getSharedContextDisagg()->notDisaggregatedMode())
+        && !S3::ClientFactory::instance().isEnabled())
     {
         if (auto res = executeAsPipeline(context, internal); res)
             return std::move(*res);

@@ -309,8 +309,10 @@ ColumnsWithTypeAndName ExecutorTest::executeStreams(DAGContext * dag_context)
     TiFlashTestEnv::setUpTestContext(*context.context, dag_context, context.mockStorage(), TestType::EXECUTOR_TEST);
     // Currently, don't care about regions information in tests.
     Blocks blocks;
-    queryExecute(*context.context, /*internal=*/true)->execute([&blocks](const Block & block) { blocks.push_back(block); }).verify();
-    return vstackBlocks(std::move(blocks)).getColumnsWithTypeAndName();
+    auto executor = queryExecute(*context.context, /*internal=*/true);
+    executor->execute([] (const Block &) {}).verify();
+    std::cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! RU = " << executor->collectRequestUnit() << std::endl;
+    return {};
 }
 
 Blocks ExecutorTest::getExecuteStreamsReturnBlocks(

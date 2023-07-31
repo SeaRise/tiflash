@@ -19,6 +19,7 @@
 #include <Storages/DeltaMerge/SegmentReadTaskPool.h>
 
 #include <magic_enum.hpp>
+#include <thread>
 
 namespace CurrentMetrics
 {
@@ -287,6 +288,7 @@ bool SegmentReadTaskPool::readOneBlock(BlockInputStreamPtr & stream, const Segme
 {
     MemoryTrackerSetter setter(true, mem_tracker.get());
     auto block = stream->read();
+    std::this_thread::sleep_for(std::chrono::seconds(20));
     if (block)
     {
         pushBlock(std::move(block));

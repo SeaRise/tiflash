@@ -37,6 +37,7 @@ enum class OperatorStatus
     CANCELLED,
     /// waiting status
     WAITING,
+    /// wait for notify status
     WAIT_FOR_NOTIFY,
     /// io status
     IO_IN,
@@ -66,6 +67,7 @@ public:
     // running status may return are NEED_INPUT and HAS_OUTPUT here.
     OperatorStatus await();
 
+    // When op awakened from the WAIT_FOR_NOTIFY state, the notify method is called.
     void notify();
 
     // These two methods are used to set state, log and etc, and should not perform calculation logic.

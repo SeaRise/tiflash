@@ -290,11 +290,7 @@ void MemoryTracker::reportAmount()
         CurrentMetrics::set(*amount_metric, amount.load(std::memory_order_relaxed));
 }
 
-#if __APPLE__ && __clang__
-__thread MemoryTracker * current_memory_tracker = nullptr;
-#else
 thread_local MemoryTracker * current_memory_tracker = nullptr;
-#endif
 
 std::shared_ptr<MemoryTracker> root_of_non_query_mem_trackers = MemoryTracker::createGlobalRoot();
 std::shared_ptr<MemoryTracker> root_of_query_mem_trackers = MemoryTracker::createGlobalRoot();

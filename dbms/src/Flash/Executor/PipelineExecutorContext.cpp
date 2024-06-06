@@ -15,6 +15,7 @@
 #include <Flash/Coprocessor/DAGContext.h>
 #include <Flash/Executor/PipelineExecutorContext.h>
 #include <Flash/Executor/ResultQueue.h>
+#include <Flash/Mpp/MPPReceiverSet.h>
 #include <Flash/Mpp/MPPTunnelSet.h>
 #include <Flash/Mpp/Utils.h>
 #include <Flash/Pipeline/Schedule/TaskScheduler.h>
@@ -178,9 +179,12 @@ void PipelineExecutorContext::cancel()
         cancelSharedQueues();
         if (likely(dag_context))
         {
-            // Cancel the tunnel_set here to prevent pipeline tasks waiting in the WAIT_FOR_NOTIFY state from never being notified.
+            // Cancel the tunnel_set and mpp_receiver_set here to prevent
+            // pipeline tasks waiting in the WAIT_FOR_NOTIFY state from never being notified.
             if (dag_context->tunnel_set)
                 dag_context->tunnel_set->close(getTrimmedErrMsg(), false);
+            if (dag_context->mpp_receiver_set)
+                dag_context->mpp_receiver_set->cancel();
         }
         cancelResultQueueIfNeed();
         if likely (TaskScheduler::instance && !query_id.empty())
